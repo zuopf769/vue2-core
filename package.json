@@ -1,0 +1,26 @@
+{
+  "name": "vue2-core",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "rollup -cw"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zuopf769/vue2-core.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zuopf769/vue2-core/issues"
+  },
+  "homepage": "https://github.com/zuopf769/vue2-core#readme",
+  "devDependencies": {
+    "@babel/core": "^7.21.5",
+    "@babel/preset-env": "^7.21.5",
+    "rollup": "^2.79.1",
+    "rollup-plugin-babel": "^4.4.0"
+  }
+}
