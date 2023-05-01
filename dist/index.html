@@ -9,7 +9,16 @@
 </head>
 <body>
     <script>
-        console.log(Vue);
+        // 响应式的数据变化，数据变化了我们可以监控到数据的变化，
+        // 数据的取值和更改我们要监控到
+        let vm = new Vue({
+            data(){ 
+                return {
+                    name: 'zs',
+                    age: 30
+                }
+            }
+        })
     </script>
 </body>
 </html>
