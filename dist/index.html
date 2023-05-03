@@ -1,24 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
     <script src="./vue.js"></script>
-</head>
-<body>
+  </head>
+  <body>
     <script>
-        // 响应式的数据变化，数据变化了我们可以监控到数据的变化，
-        // 数据的取值和更改我们要监控到
-        let vm = new Vue({
-            data(){ 
-                return {
-                    name: 'zs',
-                    age: 30
-                }
-            }
-        })
+      // 响应式的数据变化，数据变化了我们可以监控到数据的变化，
+      // 数据的取值和更改我们要监控到
+      let vm = new Vue({
+        data() {
+          return {
+            name: "zs",
+            age: 30,
+            address: {
+              country: "china",
+              province: "sx",
+            },
+          };
+        },
+      });
+
+      // vm._data.name = "lisi"; // 修改属性值会触发set
+      // console.log(vm.name); // 取值时会触发get vm.xxx =>(代理到)  vm._data.xxx
+      // console.log(vm._data.name);
+
+      console.log(vm);
     </script>
-</body>
+  </body>
 </html>
