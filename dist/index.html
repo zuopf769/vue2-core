@@ -18,16 +18,30 @@
             age: 30,
             address: {
               country: "china",
-              province: "sx",
+              province: "shanxi",
             },
+            hoddy: ["eat", "drink", { age: 1 }], // 数组里面的引用类型也需要劫持
           };
         },
       });
 
       // vm._data.name = "lisi"; // 修改属性值会触发set
+      // vm.name = "lisi";
+
       // console.log(vm.name); // 取值时会触发get vm.xxx =>(代理到)  vm._data.xxx
       // console.log(vm._data.name);
 
+      vm.address = {
+        country: "china",
+        province: "sichuan",
+        viliage: "dagou",
+      };
+      console.log(vm);
+
+      // 修改数组，很少用索引来操作数组，如果[9999]个元素，内部劫持会浪费性能
+      // 用户一般修改数组，都是通过push,shift等方法来操作
+      // vm.hoddy[1] = "swimming";
+      vm.hoddy.push("swimming");
       console.log(vm);
     </script>
   </body>

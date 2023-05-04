@@ -50,11 +50,85 @@
     return typeof key === "symbol" ? key : String(key);
   }
 
+  // 我们希望重新数组的部分方法
+  // 思路： 改变原型链、AOP函数劫持：内部调用原本的方法前后新加逻辑
+
+  // 获取数组的原型
+  var oldArrayProtoMethods = Array.prototype;
+
+  // 基于Array.prototype创建一个新的对象
+  // 让数组类型的value的__proto__指向下面的对象，等于修改了原型链
+  // arrayMethods.__proto__ = oldArrayProtoMethods;
+  // value.__proto__ == arrayMethods
+  var arrayMethods = Object.create(oldArrayProtoMethods);
+
+  // 所有的变异方法7个：能修改原数组的方法： 对头（尾）
+  // concat、slice不能修改原数组
+  var methods = ["push", "pop", "shift", "unshift", "reverse", "sort", "splice"];
+  methods.forEach(function (method) {
+    // arrayMethods上面的加的方法只会影响arrayMethods上面的方法，不会覆盖Array.prototype上的原本的方法
+    // 通过原型链找到了arrayMethods的push就不会继续去找Array.prototype上的push方法
+    // 重新arrayMethods上的7个方法
+    // arr.push(1,2,3)
+    arrayMethods[method] = function () {
+      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+      // 这里重写了数组的方法
+      // 旧方法: 在新的方法里面调用
+      // this就是arr
+      var result = oldArrayProtoMethods[method].apply(this, args); // 内部调用原来的方法，函数的劫持，面向切片变成
+
+      console.log("array method: ", method);
+
+      // 底下为AOP的增加自己的逻辑
+
+      // this是arr，谁调用的push就是谁
+      // this就是Observer中的那个value
+      var ob = this.__ob__;
+      // 新增的数组
+      var inserted;
+      // push和unshift会新增数据，新增的数据也需要劫持
+      // splice也可能会新增数据
+      switch (method) {
+        case "push":
+        case "unshift":
+          inserted = args; // arr.unshift(1, 2, 3) // 新增的内容是一个数组
+          break;
+        case "splice":
+          inserted = args.slice(2);
+      }
+      // 对数组类型的数据进行观察劫持
+      if (inserted) ob.observeArray(inserted); // 对新增的数据（数组）再次进行观测劫持
+      return result;
+    };
+  });
+
   var Observer = /*#__PURE__*/function () {
     // 观测值
     function Observer(value) {
       _classCallCheck(this, Observer);
-      this.walk(value);
+      // 给所有响应式数据增加标识，并且可以在响应式上获取Observer实例上的方法
+      // 如果数据上已经有了__ob__标识，证明已经被代理过了
+      // 增加__ob__属性为this，目的是可以在value上取到this从而调用Observer类上的方法
+      // 等同于value.__ob__ = this；但是没有控制可以枚举性，会导致下面defineReactive的时候死循环
+      // 值是this，但是不可枚举，循环的时候无法获取，从而解决了死循环的问题
+      Object.defineProperty(value, "__ob__", {
+        enumerable: false,
+        configurable: false,
+        value: this
+      });
+      if (Array.isArray(value)) {
+        // 重新数组的7个变异方法，为啥是变异方法，因为会修改原数组
+
+        // 需要保留数组原有的方法，并且可以重写部分方法
+        value.__proto__ = arrayMethods; // 重写数组原型方法
+        // 数组里面的对象引用类型也需要进行劫持
+        this.observeArray(value); // 如果数组中方的是对象，可以监控到对象的改变
+      } else {
+        // 遍历
+        this.walk(value);
+      }
     }
 
     // 循环递归（性能差的原因）对象，对对象的所有属性进行劫持
@@ -70,9 +144,19 @@
           defineReactive(data, key, value);
         }
       }
+
+      // 观测数组
+    }, {
+      key: "observeArray",
+      value: function observeArray(data) {
+        data.forEach(function (item) {
+          return observe(item);
+        });
+      }
     }]);
     return Observer;
-  }(); // 闭包
+  }(); // 要暴露的方法，所以不能放到Observer类里面
+  // 闭包
   function defineReactive(data, key, value) {
     // 深度属性劫持
     // 如果value还是object类型，继续调用observe进行递归劫持
@@ -82,6 +166,8 @@
     // 所以vue中单独写了一些api如$set, $delete来实现属性的新增的和删除后，仍然能做到数据劫持
     Object.defineProperty(data, key, {
       get: function get() {
+        console.log("get key ".concat(key));
+
         // 取值的时候会执行get
         // 闭包，value不会销毁，能取得到
         return value;
@@ -89,7 +175,9 @@
       set: function set(newValue) {
         // 设值的时候会执行set
         if (newValue == value) return;
+        console.log("set key ".concat(key, " ").concat(newValue));
 
+        // 再次劫持
         // 深度属性劫持
         // 如果设置的属性的value仍然是对象，继续递归进行新增属性的响应式
         observe(newValue);
@@ -102,6 +190,11 @@
 
     if (_typeof(data) !== "object" || data === null) {
       return; // 只对对象进行劫持
+    }
+
+    // data上有__ob__标识证明已经被观察过了，直接返回原本的Observer就可以了
+    if (data.__ob__ instanceof Observer) {
+      return data.__ob__;
     }
 
     // 如果一个对象被劫持过了，那就不需要再被劫持了（需要判断一个对象是否被劫持过，可以添加一个实例，用实例来判断是否被劫持过）
