@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="./vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div>{{name}}</div>
+      <span>{{age}}</span>
+    </div>
+    <script>
+      // 响应式的数据变化，数据变化了我们可以监控到数据的变化，
+      // 数据的取值和更改我们要监控到
+      let vm = new Vue({
+        data() {
+          return {
+            name: "zs",
+            age: 30,
+            address: {
+              country: "china",
+              province: "shanxi",
+            },
+            hoddy: ["eat", "drink", { age: 1 }], // 数组里面的引用类型也需要劫持
+          };
+        },
+        el: "#app", // 我们要将数据解析到el元素上
+      });
+      // 1.模版引擎 性能差 需要正则匹配 vue1.0的时候没有引入虚拟dom的概念
+      // 2.采用虚拟DOM，数据变化后比较虚拟DOM的差异，最后更新需要更新的地方
+      // 3.核心就是我们需要将模板变成我们的js语法，通过js语法生成虚拟DOM
+
+      // el 挂载应用
+      // template 会转换成render
+      // render
+
+      // 也可以手动mount，上面的el就是自动mount
+      vm.$mount();
+    </script>
+  </body>
+</html>
