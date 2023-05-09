@@ -8,9 +8,11 @@
     <script src="./vue.js"></script>
   </head>
   <body>
-    <div id="app">
-      <div style="color: red">hello {{name}}</div>
-      <span>{{age}}</span>
+    <div id="app" style="color: red; font-size: 50px">
+      <div id="wapper" style="color: red; font-size: 50px">
+        {{name}} name {{age}} age
+      </div>
+      <span>world</span>
     </div>
     <script>
       // 响应式的数据变化，数据变化了我们可以监控到数据的变化，
@@ -38,7 +40,7 @@
       // render
 
       // 也可以手动mount，上面的el就是自动mount
-      vm.$mount();
+      // vm.$mount();
     </script>
   </body>
 </html>

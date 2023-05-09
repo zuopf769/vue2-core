@@ -4,6 +4,33 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+  function _iterableToArrayLimit(arr, i) {
+    var _i = null == arr ? null : "undefined" != typeof Symbol && arr[Symbol.iterator] || arr["@@iterator"];
+    if (null != _i) {
+      var _s,
+        _e,
+        _x,
+        _r,
+        _arr = [],
+        _n = !0,
+        _d = !1;
+      try {
+        if (_x = (_i = _i.call(arr)).next, 0 === i) {
+          if (Object(_i) !== _i) return;
+          _n = !1;
+        } else for (; !(_n = (_s = _x.call(_i)).done) && (_arr.push(_s.value), _arr.length !== i); _n = !0);
+      } catch (err) {
+        _d = !0, _e = err;
+      } finally {
+        try {
+          if (!_n && null != _i.return && (_r = _i.return(), Object(_r) !== _r)) return;
+        } finally {
+          if (_d) throw _e;
+        }
+      }
+      return _arr;
+    }
+  }
   function _typeof(obj) {
     "@babel/helpers - typeof";
 
@@ -34,6 +61,28 @@
       writable: false
     });
     return Constructor;
+  }
+  function _slicedToArray(arr, i) {
+    return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
+  }
+  function _arrayWithHoles(arr) {
+    if (Array.isArray(arr)) return arr;
+  }
+  function _unsupportedIterableToArray(o, minLen) {
+    if (!o) return;
+    if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+    var n = Object.prototype.toString.call(o).slice(8, -1);
+    if (n === "Object" && o.constructor) n = o.constructor.name;
+    if (n === "Map" || n === "Set") return Array.from(o);
+    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+  }
+  function _arrayLikeToArray(arr, len) {
+    if (len == null || len > arr.length) len = arr.length;
+    for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+    return arr2;
+  }
+  function _nonIterableRest() {
+    throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
   }
   function _toPrimitive(input, hint) {
     if (typeof input !== "object" || input === null) return input;
@@ -281,8 +330,12 @@
   // <div> <br/> 标签结束可能是> 也可能是/>
   var startTagClose = /^\s*(\/?)>/; // 匹配标签结束的 >
 
-  // 抽象语法树
-  /*
+  // 对模版进行编译
+  // vue3不是采用的正则匹配了，是一个一个字符匹配
+  // 思路： 每解析一个标签就删除一个标签，每解析一个属性就删除一个属性；字符串被截取完了就结束了
+  function parseHTML(html) {
+    // 抽象语法树
+    /*
     {
       tag:'div',
       type:1,
@@ -290,83 +343,82 @@
       attrs:[{name:'zf',age:10}],
       parent:null
     }
-  */
+    */
 
-  // 用于存放元素的栈，利用栈来创建一棵树
-  var stack = [];
-  // 节点类型-标签类型
-  var ELEMENT_TYPE = 1;
-  // 节点类型-文本类型
-  var TEXT_TYPE = 3;
-  // 根节点
-  var root;
-  // 指向栈中最后一个元素
-  var currentParent;
-  function createASTElement(tagName, attrs) {
-    return {
-      tag: tagName,
-      type: ELEMENT_TYPE,
-      children: [],
-      attrs: attrs,
-      parent: null
-    };
-  }
-
-  // 开始标签 <div><span><a>text</a></span></div>
-  function start(tagName, attrs) {
-    console.log(tagName, attrs);
-    // 创建一个ast节点
-    var element = createASTElement(tagName, attrs);
-    // 看下是否是空树
-    if (!root) {
-      // 如果为空树，当前节点是树的根节点
-      root = element;
+    // 用于存放元素的栈，利用栈来创建一棵树
+    var stack = [];
+    // 节点类型-标签类型
+    var ELEMENT_TYPE = 1;
+    // 节点类型-文本类型
+    var TEXT_TYPE = 3;
+    // 根节点
+    var root;
+    // 指向栈中最后一个元素
+    var currentParent;
+    function createASTElement(tagName, attrs) {
+      return {
+        tag: tagName,
+        type: ELEMENT_TYPE,
+        children: [],
+        attrs: attrs,
+        parent: null
+      };
     }
-    // 放在end时候执行该逻辑也行
-    // if (currentParent) {
-    //   element.parent = currentParent;
-    //   currentParent.children.push(element);
-    // }
-    stack.push(element);
-    // currentParent为栈中的最后一个元素
-    currentParent = element;
-  }
 
-  // 结束标签
-  function end(tagName) {
-    console.log(tagName);
-    // 当前标签结束就弹栈；弹出栈中的最后一个元素
-    var element = stack.pop();
-    // currentParent为栈中的最后一个元素
-    currentParent = stack[stack.length - 1];
-    if (currentParent) {
-      // 当前标签结束的这个元素的parent就是栈中的最后一个元素
-      element.parent = currentParent;
-      // 栈中的最后一个元素的儿子就是当前弹栈弹出来的节点
-      currentParent.children.push(element);
+    // 开始标签 <div><span><a>text</a></span></div>
+    function start(tagName, attrs) {
+      console.log(tagName, attrs);
+      // 创建一个ast节点
+      var element = createASTElement(tagName, attrs);
+      // 看下是否是空树
+      if (!root) {
+        // 如果为空树，当前节点是树的根节点
+        root = element;
+      }
+      // 进栈构建父子关系
+      // 放在end时候执行该逻辑也行
+      // if (currentParent) {
+      //   element.parent = currentParent;
+      //   currentParent.children.push(element);
+      // }
+      stack.push(element);
+      // currentParent为栈中的最后一个元素
+      currentParent = element;
     }
-  }
 
-  // 文本；文本不需要放到栈中，文本直接放到currentParent节点的children中
-  function chars(text) {
-    console.log(text);
-    // 去掉空，可以优化为如果空格超过2个就删除2个以上的空格
-    text = text.replace(/\s/g, "");
-    // 不是节点直接的换行等空文本
-    if (text) {
-      // 文本节点直接放到当前栈的最后一个节点的children中，作为他的儿子
-      currentParent.children.push({
-        type: TEXT_TYPE,
-        text: text,
-        parent: currentParent
-      });
+    // 结束标签
+    function end(tagName) {
+      // console.log(tagName);
+      // 当前标签结束就弹栈；弹出栈中的最后一个元素
+      var element = stack.pop();
+      // currentParent为栈中的最后一个元素
+      currentParent = stack[stack.length - 1];
+      // 出栈构建父子关系
+      // 放在start入栈的时候执行该逻辑也行
+      if (currentParent) {
+        // 当前标签结束的这个元素的parent就是栈中的最后一个元素
+        element.parent = currentParent;
+        // 栈中的最后一个元素的儿子就是当前弹栈弹出来的节点
+        currentParent.children.push(element);
+      }
     }
-  }
 
-  // 对模版进行编译
-  // vue3不是采用的正则匹配了，是一个一个字符匹配
-  // 思路： 每解析一个标签就删除一个标签，每解析一个属性就删除一个属性；字符串被截取完了就结束了
-  function parseHTML(html) {
+    // 文本；文本不需要放到栈中，文本直接放到currentParent节点的children中
+    function chars(text) {
+      // console.log(text);
+      // 去掉空，可以优化为如果空格超过2个就删除2个以上的空格
+      text = text.replace(/\s/g, "");
+      // 不是节点直接的换行等空文本
+      if (text) {
+        // 文本节点直接放到当前栈的最后一个节点的children中，作为他的儿子
+        currentParent.children.push({
+          type: TEXT_TYPE,
+          text: text,
+          parent: currentParent
+        });
+      }
+    }
+
     // html字符串前进n个字符：例如截掉已经捕获到的开头标签名、属性名和属性值、结束标签
     function advance(n) {
       html = html.substring(n);
@@ -454,18 +506,135 @@
     }
 
     // html为空
-    console.log("html", html);
+    // console.log("html", html);
     // root
-    console.log("root", root);
+    // console.log("root", root);
+
+    return root;
+  }
+
+  var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{aaaaaa}} 匹配到的时候表达式的变量
+
+  /**
+   *
+   *  <div style="color:red">hello {{name}} <span></span></div>
+   *  render(){
+   *    return _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,''))
+   *  }
+   */
+
+  // 如果是文本就创建文本节点；如果是标签元素就调用codegen
+  function gen(node) {
+    // 标签类型
+    if (node.type == 1) {
+      return codegen(node);
+    } else {
+      // 文本类型节点
+      var text = node.text;
+      // 纯文本类型
+      if (!defaultTagRE.test(text)) {
+        return "_v(".concat(JSON.stringify(text), ")");
+      }
+      // 包含{{}}的类型
+      // 变量name需要转成字符串_s(name) 用+拼接
+      // {{name}} hello {{name}} => _v(_s(name) + 'hello' + _s(name))
+      console.log("文本节点：", text);
+      var tokens = [];
+      var match;
+      // exec方法的特殊点：
+      // 现象：当正则表达式里面有g的时候，连续执行两次结果不一样: let reg = /a/g; reg.exec('abc'); reg.exec('abc');
+      // 原因：执行完一次后 reg.lastIndex变成1了，从第一个字符再往后找就找不到了
+      // 解决方法：每次重新执行exec的时候需要把reg.lastIndex重置为0
+      defaultTagRE.lastIndex = 0;
+      // 记录上一个匹配内容后的位置，算上字符串本身的长度
+      var lastIndex = 0;
+      while (match = defaultTagRE.exec(text)) {
+        console.log("match", match);
+        // 匹配的位置
+        var index = match.index;
+
+        // 中间有一个文本字符串
+        // {{name}} hello {{age}} age
+        // lastIndex就是{{name}}的结尾位置，index就是{{name}}的开头位置
+        if (index > lastIndex) {
+          // 把中间的hello内容放到tokens中
+          tokens.push(JSON.stringify(text.slice(lastIndex, index)));
+        }
+        tokens.push("_s(".concat(match[1].trim(), ")"));
+        lastIndex = index + match[0].length;
+      }
+
+      // 最后的文本字符串
+      // {{name}} hello {{age}} age中的age
+      // 从{{age}}的结束位置截取到最后
+      if (text.length > lastIndex) {
+        tokens.push(JSON.stringify(text.slice(lastIndex)));
+      }
+      console.log(tokens);
+      return "_v(".concat(tokens.join("+"), ")");
+    }
+  }
+
+  // 生成儿子节点
+  function getChildren(el) {
+    var children = el.children;
+    if (children) {
+      return "".concat(children.map(function (c) {
+        return gen(c);
+      }).join(","));
+    } else {
+      return false;
+    }
+  }
+
+  // 生成属性
+  // attrs [{name: 'id', value: 'wapper'}, {name: 'style', value: 'color: red; font-size: 50px'}]
+  function genProps(attrs) {
+    var str = "";
+    var _loop = function _loop() {
+      var attr = attrs[i];
+      // 如果attr名称是style
+      // {name: 'style', value: 'color: red; font-size: 50px'}
+      // 'color: red; font-size: 50px' => {color: red, font-size: 50px}
+      if (attr.name === "style") {
+        var obj = {};
+        attr.value.split(";").forEach(function (item) {
+          var _item$split = item.split(":"),
+            _item$split2 = _slicedToArray(_item$split, 2),
+            key = _item$split2[0],
+            value = _item$split2[1];
+          obj[key] = value;
+        });
+        attr.value = obj;
+      }
+      // JSON.stringify把vue转成字符串
+      str += "".concat(attr.name, ":").concat(JSON.stringify(attr.value), ",");
+    };
+    for (var i = 0; i < attrs.length; i++) {
+      _loop();
+    }
+    return "{".concat(str.slice(0, -1), "}");
+  }
+
+  // 生成code
+  function codegen(el) {
+    console.log("el", el);
+
+    // 生成改节点的孩子，如果有孩子就加个,没孩子就不加了
+    var children = getChildren(el);
+    var code = "_c('".concat(el.tag, "', ").concat(el.attrs.length > 0 ? genProps(el.attrs) : "undefined").concat(children ? ",".concat(children) : "", "\n  )");
+    return code;
   }
   function compileToFunctions(template) {
-    console.log(template);
+    // console.log(template);
 
     // 1. 将template转换成AST语法树
-    parseHTML(template);
+    var ast = parseHTML(template);
+    // console.log(ast);
 
     // 2. 生成render方法，render方法执行后返回的结果就是虚拟DOM
-    return function () {};
+    var code = codegen(ast);
+    console.log("code", code);
   }
 
   function initMixin(Vue) {
