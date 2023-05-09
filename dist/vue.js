@@ -367,7 +367,7 @@
 
     // 开始标签 <div><span><a>text</a></span></div>
     function start(tagName, attrs) {
-      console.log(tagName, attrs);
+      // console.log(tagName, attrs);
       // 创建一个ast节点
       var element = createASTElement(tagName, attrs);
       // 看下是否是空树
@@ -519,7 +519,7 @@
    *
    *  <div style="color:red">hello {{name}} <span></span></div>
    *  render(){
-   *    return _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,''))
+   *    return _c('div',{style:{color:'red'}},_v('hello'+_s(name) + 'age' + _s(age)),_c('span',undefined,''))
    *  }
    */
 
@@ -549,7 +549,7 @@
       // 记录上一个匹配内容后的位置，算上字符串本身的长度
       var lastIndex = 0;
       while (match = defaultTagRE.exec(text)) {
-        console.log("match", match);
+        // console.log("match", match);
         // 匹配的位置
         var index = match.index;
 
@@ -570,7 +570,9 @@
       if (text.length > lastIndex) {
         tokens.push(JSON.stringify(text.slice(lastIndex)));
       }
-      console.log(tokens);
+
+      // console.log(tokens);
+
       return "_v(".concat(tokens.join("+"), ")");
     }
   }
@@ -618,7 +620,7 @@
 
   // 生成code
   function codegen(el) {
-    console.log("el", el);
+    // console.log("el", el);
 
     // 生成改节点的孩子，如果有孩子就加个,没孩子就不加了
     var children = getChildren(el);
@@ -634,8 +636,63 @@
 
     // 2. 生成render方法，render方法执行后返回的结果就是虚拟DOM
     var code = codegen(ast);
-    console.log("code", code);
+    // console.log("code", code);
+
+    // 模版引擎的原理： with + new Function
+    // _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,''))
+    // 用with？为了取值方便；解决_c _v _s从哪儿取的问题，不用都得vm._c vm._v vm._s了
+    // 为啥是this而不是vm? render函数被谁调用就是谁； this是谁就从谁的上面取_c _v _s
+    var render = "with(this){return ".concat(code, "}");
+    var renderFn = new Function(render);
+    // 生成render函数，需要调用；分成两块：生成函数、调用函数
+    return renderFn;
   }
+
+  // 最终的render函数
+  /*
+  function render() {
+    with (this) {
+      _c(
+        "div",
+        { style: { color: "red" } },
+        _v("hello" + _s(name)),
+        _c("span", undefined, "")
+      );
+    }
+  }
+  */
+
+  // render函数调用绑定作用域
+  // render.call(vm);
+
+  function initLifeCycle(Vue) {
+    // 生成真实DOM
+    Vue.prototype._update = function () {
+      console.log("_update");
+    };
+    // 生成虚拟DOM
+    Vue.prototype._render = function () {
+      console.log("_render");
+    };
+  }
+  function mountComponent(vm, el) {
+    // 1. 调用render方法，生成虚拟DOM
+    // 2. 根据虚拟DOM，生成真实DOM
+    vm._update(vm._render()); // vm.$options.render();
+
+    // 2. 根据虚拟DOM，生成真实DOM
+
+    // 3. 把真实DOM插入到el元素中
+  }
+
+  // vue的核心：
+  // 1）创建响应式数据
+  // 2）模板转换成ast语法树
+  // 3）将ast语法树转换成render函数, 调用render方法，生成虚拟DOM
+  // 4）后续每次数据更新，只需要执行render函数，无需再次执行ast转换的过程
+
+  // render函数会产生虚拟DOM(使用响应式数据)
+  // 根据虚拟DOM，生成真实DOM
 
   function initMixin(Vue) {
     // 通过原型prototype给Vue增加init方法
@@ -682,6 +739,11 @@
       // script引用的vue.global.js这个编译过程是在浏览器中执行的
       // runtime运行时是不包含模板编译的，整个编译是在打包的过程中通过loader编译.vue文件的；
       // 用runtime的时候不能使用template
+
+      console.log("render", options.render);
+
+      // 挂载组件
+      mountComponent(vm);
     };
   }
 
@@ -691,6 +753,7 @@
     this._init(options);
   }
   initMixin(Vue); // 扩展了_init方法
+  initLifeCycle(Vue); // 扩展了生命周期方法
 
   return Vue;
 

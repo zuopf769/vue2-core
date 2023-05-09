@@ -81,7 +81,7 @@ export function parseHTML(html) {
 
   // 开始标签 <div><span><a>text</a></span></div>
   function start(tagName, attrs) {
-    console.log(tagName, attrs);
+    // console.log(tagName, attrs);
     // 创建一个ast节点
     let element = createASTElement(tagName, attrs);
     // 看下是否是空树

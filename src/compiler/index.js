@@ -6,7 +6,7 @@ const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{aaaaaa}} 匹配到的时�
  *
  *  <div style="color:red">hello {{name}} <span></span></div>
  *  render(){
- *    return _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,''))
+ *    return _c('div',{style:{color:'red'}},_v('hello'+_s(name) + 'age' + _s(age)),_c('span',undefined,''))
  *  }
  */
 
@@ -37,7 +37,7 @@ function gen(node) {
     // 记录上一个匹配内容后的位置，算上字符串本身的长度
     let lastIndex = 0;
     while ((match = defaultTagRE.exec(text))) {
-      console.log("match", match);
+      // console.log("match", match);
       // 匹配的位置
       let index = match.index;
 
@@ -60,7 +60,7 @@ function gen(node) {
       tokens.push(JSON.stringify(text.slice(lastIndex)));
     }
 
-    console.log(tokens);
+    // console.log(tokens);
 
     return `_v(${tokens.join("+")})`;
   }
@@ -101,7 +101,7 @@ function genProps(attrs) {
 
 // 生成code
 function codegen(el) {
-  console.log("el", el);
+  // console.log("el", el);
 
   // 生成改节点的孩子，如果有孩子就加个,没孩子就不加了
   let children = getChildren(el);
@@ -123,5 +123,31 @@ export function compileToFunctions(template) {
 
   // 2. 生成render方法，render方法执行后返回的结果就是虚拟DOM
   let code = codegen(ast);
-  console.log("code", code);
+  // console.log("code", code);
+
+  // 模版引擎的原理： with + new Function
+  // _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,''))
+  // 用with？为了取值方便；解决_c _v _s从哪儿取的问题，不用都得vm._c vm._v vm._s了
+  // 为啥是this而不是vm? render函数被谁调用就是谁； this是谁就从谁的上面取_c _v _s
+  let render = `with(this){return ${code}}`;
+  let renderFn = new Function(render);
+  // 生成render函数，需要调用；分成两块：生成函数、调用函数
+  return renderFn;
 }
+
+// 最终的render函数
+/*
+function render() {
+  with (this) {
+    _c(
+      "div",
+      { style: { color: "red" } },
+      _v("hello" + _s(name)),
+      _c("span", undefined, "")
+    );
+  }
+}
+*/
+
+// render函数调用绑定作用域
+// render.call(vm);

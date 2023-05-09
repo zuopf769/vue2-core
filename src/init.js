@@ -1,5 +1,6 @@
 import { initState } from "./state";
 import { compileToFunctions } from "./compiler";
+import { initLifeCycle, mountComponent } from "./lifecycle";
 
 export function initMixin(Vue) {
   // 通过原型prototype给Vue增加init方法
@@ -47,5 +48,10 @@ export function initMixin(Vue) {
     // script引用的vue.global.js这个编译过程是在浏览器中执行的
     // runtime运行时是不包含模板编译的，整个编译是在打包的过程中通过loader编译.vue文件的；
     // 用runtime的时候不能使用template
+
+    console.log("render", options.render);
+
+    // 挂载组件
+    mountComponent(vm, el);
   };
 }
