@@ -41,6 +41,13 @@
 
       // 也可以手动mount，上面的el就是自动mount
       // vm.$mount();
+
+      setTimeout(() => {
+        vm.name = "lisi";
+        vm.age = 31;
+        // 类似强制刷新
+        vm._update(vm._render());
+      }, 2000);
     </script>
   </body>
 </html>
