@@ -153,6 +153,56 @@
     };
   });
 
+  var id$1 = 0;
+
+  // 被观察者，属性就是被观察者；属性的值发生变化后会通知所有的观察者更新
+
+  // 属性的dep要收集watcher
+  var Dep = /*#__PURE__*/function () {
+    function Dep() {
+      _classCallCheck(this, Dep);
+      // 唯一id
+      this.id = id$1++;
+      // 这里存放着当前属性对应的watcher有哪些
+      this.subs = [];
+    }
+
+    // 保证dep和watcher都不重复，保证dep和watcher双向维护
+    _createClass(Dep, [{
+      key: "depend",
+      value: function depend() {
+        // 这里不希望放置不重复的watcher；而且不只是一个单向的关系，dep -> watcher
+        // 也得让wather记录dep
+        // this.subs.push(Dep.target);
+
+        // 我们希望dep和watcher相互维护各自的引用，相互记忆
+        // 把dep传给了watcher
+        Dep.target.addDep(this); // 让watcher记住dep，在watcher中记住dep的时候去了重同时也让dep记录了watcher
+
+        // dep和watcher是多对多的关系
+        // 一个属性在多个组件中使用 一个dep对应多个watcher
+        // 一个组件中有多个属性 一个watcher包含多个dep
+      }
+    }, {
+      key: "addSubs",
+      value: function addSubs(watcher) {
+        this.subs.push(watcher);
+      }
+    }, {
+      key: "notify",
+      value: function notify() {
+        // 告诉所有watcher更新
+        this.subs.forEach(function (watcher) {
+          return watcher.update();
+        });
+      }
+    }]);
+    return Dep;
+  }(); // target为什么不挂载到原型上，反而是个静态变量呢？因为没必要通过实例来访问，只是一个作为一个全局变量
+  // 静态属性 - 相当于全局变量
+  // 记录
+  Dep.target = null;
+
   var Observer = /*#__PURE__*/function () {
     // 观测值
     function Observer(value) {
@@ -211,11 +261,20 @@
     // 如果value还是object类型，继续调用observe进行递归劫持
     observe(value);
 
+    // 每一个属性都有一个dep
+    var dep = new Dep();
+
     // 缺点：Object.defineProperty只能劫持已经存在的属性，对于新增的和删除的操作监听不到
     // 所以vue中单独写了一些api如$set, $delete来实现属性的新增的和删除后，仍然能做到数据劫持
     Object.defineProperty(data, key, {
       get: function get() {
         console.log("get key ".concat(key));
+        // 什么时候Dep.target会有值？模版中使用了的变量，在调用_render()方法的时候就会在Dep.target加上值
+        // 用到了的属性才会被收集，在data中定义了，但是视图组件中没有用到也不会被收集
+        if (Dep.target) {
+          // 让这个属性的收集器记住当前的watcher
+          dep.depend();
+        }
 
         // 取值的时候会执行get
         // 闭包，value不会销毁，能取得到
@@ -231,6 +290,9 @@
         // 如果设置的属性的value仍然是对象，继续递归进行新增属性的响应式
         observe(newValue);
         value = newValue;
+
+        // 属性一变化，就通知更新
+        dep.notify();
       }
     });
   }
@@ -665,6 +727,79 @@
   // render函数调用绑定作用域
   // render.call(vm);
 
+  // 观察者模式
+  // Watcher观察者，观察某个属性，某个属性的值发生变化后 观察者就update
+  // 每个属性有一个dep, 属性就是被观察者；属性的值发生变化后会通知所有的观察者更新
+
+  // watcher的id
+  var id = 0;
+
+  // 1) 当我们创建渲染watcher的时候我们把当前的渲染watcher放到 Dep.target上
+  // 2) this.getter()会调用_render()方法，就会走到属性的get方法上
+
+  // 不同组件有不同的watcher，目前只有一个，渲染根实例的
+  var Watcher = /*#__PURE__*/function () {
+    function Watcher(vm, fn, options) {
+      _classCallCheck(this, Watcher);
+      // 唯一标识符
+      this.id = id++;
+      // 组件实例
+      this.vm = vm;
+      // 渲染watcher
+      this.renderWatcher = options;
+      // callback
+      this.getter = fn; // getter意味着调用这个函数可以发生取值操作
+      // 记录dep
+      // watcher为什么要记录deps?
+      // 1. 后续实现计算属性会用到
+      // 2. 一些清理工作需要用到: 当组件卸载的时候会把该组件的所有依赖deps清除掉
+      this.deps = [];
+      this.depsId = new Set();
+      this.get();
+    }
+    _createClass(Watcher, [{
+      key: "get",
+      value: function get() {
+        // 先把当前的watcher放到 Dep.target上
+        // A组件渲染的时候会把A组件的watcher放上来，B组件渲染的时候会把B组件的watcher放上来，
+        Dep.target = this;
+        // 调用vm._update(vm._render()) 就会去vm上取name和age的值
+        this.getter();
+        // 渲染完毕后就清空
+        Dep.target = null;
+      }
+
+      // 一个组件 对应着多个属性 重复的属性不应该重复记录 name可能会被引用几次
+    }, {
+      key: "addDep",
+      value: function addDep(dep) {
+        var depId = dep.id;
+        if (!this.depsId.has(depId)) {
+          this.deps.push(dep);
+          this.depsId.add(depId);
+          // watcher记住了dep而且去重了，此时dep也记住了watcher
+          dep.addSubs(this);
+        }
+      }
+    }, {
+      key: "update",
+      value: function update() {
+        console.log("update");
+        // 重新渲染
+        this.get();
+      }
+    }]);
+    return Watcher;
+  }(); // 要给每个属性加一个dep, 目的就是收集watcher
+
+  // 一个组件对应一个watcher；
+  // 不同的组件有不同的watcher
+  // 一个页面中多个组件，对应多个watcher；某个属性变化了，只会通知依赖了该属性的watcher去更新页面
+
+  // 组件化的目的是什么？
+  // 可复用、方便维护、局部刷新
+  // 一个组件一个watcher, 通过拆分组件来减少刷新的范围，某个属性变化了，只会通知依赖了该属性的watcher也就是组件去更新
+
   // 创建元素的虚拟节点
   //  _h() _c()方法
   function createElementVNode(vm, tag, data) {
@@ -814,7 +949,18 @@
     vm.$el = el;
     // 1. 调用render方法，生成虚拟DOM
     // 2. 根据虚拟DOM，生成真实DOM
-    vm._update(vm._render()); // vm.$options.render();
+
+    // vm._update(vm._render()); // vm.$options.render();
+
+    // 更新根组件
+    var updateComponent = function updateComponent() {
+      vm._update(vm._render());
+    };
+
+    // 首次渲染的时候会收集依赖
+    // 更新的时候会再次收集
+    var watcher = new Watcher(vm, updateComponent, true); // true标识一个渲染watcher
+    console.log(watcher);
 
     // 2. 根据虚拟DOM，生成真实DOM
 

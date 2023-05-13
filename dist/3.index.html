@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="./vue.js"></script>
+  </head>
+  <body>
+    <!-- 我们可以给模板中的每一个属性（name和age都有）添加一个收集器 dep -->
+    <!-- 页面渲染的时候 我们将渲染逻辑封装到watcher中  vm._update(vm._render()); -->
+    <!-- 让dep记住这个watcher即可，稍后属性变化了可以找到对应的dep中存放的watcher进行重写渲染 -->
+    <!-- 观察者模式 -->
+    <!-- 下面的模版最后会变成render函数 -->
+    <div id="app" style="color: red; font-size: 50px">
+      <div id="wapper" style="color: red; font-size: 50px">
+        {{name}} name {{age}} age {{name}} name {{age}} age
+      </div>
+      <span>world</span>
+    </div>
+    <script>
+      let vm = new Vue({
+        data() {
+          return {
+            name: "zs",
+            age: 30,
+            address: {
+              country: "china",
+              province: "shanxi",
+            },
+            hoddy: ["eat", "drink", { age: 1 }], // 数组里面的引用类型也需要劫持
+          };
+        },
+        el: "#app", // 我们要将数据解析到el元素上
+      });
+
+      setTimeout(() => {
+        vm.name = "lisi";
+        vm.age = 31;
+        // 类似强制刷新; 这种更新比较暴力，手动更新重新渲染；但是我们期望数据变化后自己重新渲染
+        // vm._render() 根据最新的数据生成虚拟DOM
+        // vm._update() 将虚拟DOM生成真实DOM
+
+        // vm._update(vm._render());
+      }, 2000);
+
+      // 并没有在模板中使用，所以不会被依赖收集
+      vm.address;
+
+      // 1) 将数据先处理成响应式 initState (针对对象来说主要是使用defineProperty增加set get拦截属性 针对数组是重写数组的方法)
+      // 2) 模板编译：先将模版编译成AST，然后将AST语法树生成render方法
+      // 3) 调用render函数 会进行取值操作 产生对应的虚拟DOM render() _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,'')) 触发data中某个字段的get方法
+      // 4) 将虚拟DOM转换成真实DOM
+
+      // 1. 观察者模式实现依赖收集
+      // 2. 异步更新策略（批量更新）
+      // 3. Mixin的实现策略
+    </script>
+  </body>
+</html>

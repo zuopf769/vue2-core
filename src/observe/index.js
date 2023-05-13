@@ -1,4 +1,5 @@
 import { arrayMethods } from "./array";
+import Dep from "./dep";
 class Observer {
   // 观测值
   constructor(value) {
@@ -51,11 +52,20 @@ export function defineReactive(data, key, value) {
   // 如果value还是object类型，继续调用observe进行递归劫持
   observe(value);
 
+  // 每一个属性都有一个dep
+  let dep = new Dep();
+
   // 缺点：Object.defineProperty只能劫持已经存在的属性，对于新增的和删除的操作监听不到
   // 所以vue中单独写了一些api如$set, $delete来实现属性的新增的和删除后，仍然能做到数据劫持
   Object.defineProperty(data, key, {
     get() {
       console.log(`get key ${key}`);
+      // 什么时候Dep.target会有值？模版中使用了的变量，在调用_render()方法的时候就会在Dep.target加上值
+      // 用到了的属性才会被收集，在data中定义了，但是视图组件中没有用到也不会被收集
+      if (Dep.target) {
+        // 让这个属性的收集器记住当前的watcher
+        dep.depend();
+      }
 
       // 取值的时候会执行get
       // 闭包，value不会销毁，能取得到
@@ -73,6 +83,9 @@ export function defineReactive(data, key, value) {
       observe(newValue);
 
       value = newValue;
+
+      // 属性一变化，就通知更新
+      dep.notify();
     },
   });
 }
