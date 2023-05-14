@@ -59,7 +59,7 @@ export function defineReactive(data, key, value) {
   // 所以vue中单独写了一些api如$set, $delete来实现属性的新增的和删除后，仍然能做到数据劫持
   Object.defineProperty(data, key, {
     get() {
-      console.log(`get key ${key}`);
+      // console.log(`get key ${key}`);
       // 什么时候Dep.target会有值？模版中使用了的变量，在调用_render()方法的时候就会在Dep.target加上值
       // 用到了的属性才会被收集，在data中定义了，但是视图组件中没有用到也不会被收集
       if (Dep.target) {

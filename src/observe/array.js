@@ -25,7 +25,7 @@ methods.forEach((method) => {
     // this就是arr
     const result = oldArrayProtoMethods[method].apply(this, args); // 内部调用原来的方法，函数的劫持，面向切片变成
 
-    console.log("array method: ", method);
+    // console.log("array method: ", method);
 
     // 底下为AOP的增加自己的逻辑
 

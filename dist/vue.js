@@ -128,7 +128,7 @@
       // this就是arr
       var result = oldArrayProtoMethods[method].apply(this, args); // 内部调用原来的方法，函数的劫持，面向切片变成
 
-      console.log("array method: ", method);
+      // console.log("array method: ", method);
 
       // 底下为AOP的增加自己的逻辑
 
@@ -268,7 +268,7 @@
     // 所以vue中单独写了一些api如$set, $delete来实现属性的新增的和删除后，仍然能做到数据劫持
     Object.defineProperty(data, key, {
       get: function get() {
-        console.log("get key ".concat(key));
+        // console.log(`get key ${key}`);
         // 什么时候Dep.target会有值？模版中使用了的变量，在调用_render()方法的时候就会在Dep.target加上值
         // 用到了的属性才会被收集，在data中定义了，但是视图组件中没有用到也不会被收集
         if (Dep.target) {
@@ -386,7 +386,7 @@
   // ([^\s"'=<>`]+) 除了\s"'=<>`的任意多个字符  <xx a = b 属性也可以不加单引号或者双引号
   var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/; // 匹配属性的
   // 第一个分组就是属性的key value就是分组3/分组4/分组5
-  console.log(attribute);
+  // console.log(attribute);
 
   // 注意前面的开头^，必须是开始匹配
   // <div> <br/> 标签结束可能是> 也可能是/>
@@ -784,13 +784,120 @@
     }, {
       key: "update",
       value: function update() {
-        console.log("update");
+        // console.log("update");
+
+        // 执行多次，修改为下面的方面
         // 重新渲染
-        this.get();
+        // this.get();
+
+        // 解决修改属性执行多次，把watcher放到队列中，然后一次执行
+        queueWatcher(this);
+      }
+
+      // 真实的渲染
+    }, {
+      key: "run",
+      value: function run() {
+        console.log("run");
+        this.get(); // vm.name = 最后一次的值
       }
     }]);
     return Watcher;
-  }(); // 要给每个属性加一个dep, 目的就是收集watcher
+  }(); // 用于存放watcher的队列
+  var queue = [];
+  // 类似set防止重复存放watcher，因为一个组件依赖多个属性
+  var has = {};
+  // 防抖，只执行最后一次
+  var pending = false;
+
+  // 异步批处理
+  function flushSchedulerQueue() {
+    // 拷贝一份，不要影响原来的watcher的queue
+    var flushQueue = queue.slice(0);
+
+    // clear清理工作
+    // 清理工作为什么放到前面？pending为false的话如果刷新中还有新的任务过来的话，就可以放到队列中
+    queue = [];
+    has = {};
+    pending = false;
+    // 在刷新的过程中如果还有新的watcher，会重新放到queue中
+    flushQueue.forEach(function (q) {
+      return q.run();
+    });
+  }
+  function queueWatcher(watcher) {
+    var id = watcher.id;
+    if (!has[id]) {
+      has[id] = true;
+      queue.push(watcher);
+      console.log("watcher queue", queue);
+      // 不管我们的update执行多少次，但是最终只执行一轮刷新操作
+      // 第一个属性过来就设置定时器，第二、三个属性过来的时候就不设置定时器了
+      if (!pending) {
+        // 开启一个定时器，异步执行刷新操作
+        setTimeout(flushSchedulerQueue, 0);
+        // pending为true以后就不能再次添加setTimeout了
+        pending = true;
+      }
+    }
+  }
+
+  // 封装异步方案，供用户使用和框架内部使用
+  // 外部用户使用的时候可以连续写多个vm.$nextTick(() => {})，所以也需要维护队列
+  var callbacks = [];
+  var waiting = false;
+
+  // flushCallbacks是异步执行的
+  function flushCallbacks() {
+    var cbs = callbacks.slice(0);
+    waiting = false;
+    callbacks = [];
+    cbs.forEach(function (cb) {
+      return cb();
+    });
+  }
+
+  // nextTick并不是创建异步任务，而是把异步任务维护到了队列中
+  // nextTick只会开启一次异步任务
+  // nextTick是异步么？既有同步，又有异步；同步就是把异步任务维护到了队列中，异步就是flushCallbacks是异步执行的
+
+  // nextTick没有直接使用某一个api,而是做了优雅的降级
+  // 内部优先采用promise(ie不兼容)、和promise.then同等的MutationObserver h5的api；可以考虑ie专享的setImmediate；最后才是setTimout定时器
+  // 前面的几个api都是微任务，比setTimout执行的时机快，能更快的看到页面刷新完成
+  // setTimout要开启一个新的线程，promise.then只是异步执行代码，性能开销要小
+
+  var timerFunc = null;
+  if (Promise) {
+    timerFunc = function timerFunc() {
+      Promise.resolve().then(flushCallbacks);
+    };
+  } else if (MutationObserver) {
+    var observer = new MutationObserver(flushCallbacks);
+    var textNode = document.createTextNode(1);
+    // 观察textNode的文本内容发生变化，变化后就执行回调flushCallbacks
+    observer.observe(textNode, {
+      characterData: true
+    });
+    timerFunc = function timerFunc() {
+      textNode.textContent = 2;
+    };
+  } else if (setImmediate) {
+    timerFunc = function timerFunc() {
+      setImmediate(flushCallbacks);
+    };
+  } else {
+    timerFunc = function timerFunc() {
+      setTimeout(flushCallbacks);
+    };
+  }
+  function nextTick(cb) {
+    // 把任务维护到队列中不是异步的
+    callbacks.push(cb);
+    if (!waiting) {
+      timerFunc();
+      waiting = true;
+    }
+  }
 
   // 一个组件对应一个watcher；
   // 不同的组件有不同的watcher
@@ -1034,6 +1141,9 @@
     // options就是用户的选项
     this._init(options);
   }
+
+  // 暂时先这么写，扩展$nextTick方法
+  Vue.prototype.$nextTick = nextTick;
   initMixin(Vue); // 扩展了_init方法
   initLifeCycle(Vue); // 扩展了生命周期方法
 

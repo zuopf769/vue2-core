@@ -1,11 +1,15 @@
 import { initMixin } from "./init";
 import { initLifeCycle } from "./lifecycle";
+import { nextTick } from "./observe/watcher";
 
 // 将所有的方法都耦合在一起
 function Vue(options) {
   // options就是用户的选项
   this._init(options);
 }
+
+// 暂时先这么写，扩展$nextTick方法
+Vue.prototype.$nextTick = nextTick;
 
 initMixin(Vue); // 扩展了_init方法
 initLifeCycle(Vue); // 扩展了生命周期方法

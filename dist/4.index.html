@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="./vue.js"></script>
+  </head>
+  <body>
+    <!-- 我们可以给模板中的每一个属性（name和age都有）添加一个收集器 dep -->
+    <!-- 页面渲染的时候 我们将渲染逻辑封装到watcher中  vm._update(vm._render()); -->
+    <!-- 让dep记住这个watcher即可，稍后属性变化了可以找到对应的dep中存放的watcher进行重写渲染 -->
+    <!-- 观察者模式 -->
+    <!-- 下面的模版最后会变成render函数 -->
+    <div id="app" style="color: red; font-size: 50px">
+      <div id="wapper" style="color: red; font-size: 50px">
+        {{name}} name {{age}} age
+      </div>
+      <span>world</span>
+    </div>
+    <script>
+      let vm = new Vue({
+        data() {
+          return {
+            name: "zs",
+            age: 30,
+            address: {
+              country: "china",
+              province: "shanxi",
+            },
+            hoddy: ["eat", "drink", { age: 1 }], // 数组里面的引用类型也需要劫持
+          };
+        },
+        el: "#app", // 我们要将数据解析到el元素上
+      });
+
+      /*
+      setTimeout(() => {
+        // 目前每修改一次name属性都会通知更新一次；我们期望更新操作只走一次，不要走多次
+        vm.name = "lisi";
+        vm.name = "lisi1";
+        vm.name = "lisi2";
+        vm.name = "lisi3";
+
+        // 可能有多个组件要更新
+
+        // vm._update(vm._render());
+      }, 2000);
+      */
+
+      /*
+      vm.name = "lisi"; // 不会立即重新渲染页面，异步执行，目前底层是放到了setTimeout里面
+      console.log("app.innerHTML", app.innerHTML); // 同步获取，拿到的可能是旧的
+
+      // 不能保证用户使用的那种异步方案，到底是setTimeout还是Promise.resolve().then？
+      // vue的解决方案是$nextTick，用户外部使用和框架内部都使用$nextTick来异步，底部做了异步方案的降级处理
+
+      // 能取到最新的值
+      setTimeout(() => {
+        console.log("app.innerHTML setTimeout", app.innerHTML);
+      }, 0);
+
+      // promise是微任务比setTimeout先执行，取到的还是旧的
+      Promise.resolve().then(() => {
+        console.log("app.innerHTML Promise.then", app.innerHTML);
+      });
+      */
+      vm.$nextTick(() => {
+        console.log("app.innerHTML before", app.innerHTML);
+      });
+
+      vm.name = "lisi";
+
+      // nextTick不是创建了一个异步任务，而是把回调函数放到了队列中；只会开一次异步执行
+      vm.$nextTick(() => {
+        console.log("app.innerHTML after ", app.innerHTML);
+      });
+
+      vm.$nextTick(() => {
+        console.log("nextTick1");
+      });
+
+      vm.$nextTick(() => {
+        console.log("nextTick2");
+      });
+    </script>
+  </body>
+</html>
