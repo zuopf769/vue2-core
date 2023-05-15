@@ -4,6 +4,84 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+  // 策略模式
+  var strats = {};
+  var LIFECYCLES = ["beforeCreate", "created"];
+  LIFECYCLES.forEach(function (hook) {
+    strats[hook] = function (p, c) {
+      //子存在
+      if (c) {
+        // 子存在，父也存在（父存在那么父就是数组），就把子和父拼在一起
+        if (p) {
+          return p.concat(c);
+        } else {
+          // 子存在但是父不存在，则把儿子包装成数组
+          return [c];
+        }
+      } else {
+        // 子不存在只有父，直接返回父
+        return p;
+      }
+    };
+  });
+
+  // data的props merge策略
+  // strats.data = function (p, c) {};
+
+  // 计算属性的props merge策略
+  // strats.computed = function (p, c) {};
+
+  // ...剩下的策略
+
+  function mergeOptions(parent, child) {
+    var options = {};
+
+    // 不能这么做，这么做合并不出来数组；以为直接覆盖了 {created: [fn, fn]}
+    // let options = { ...parent, ...child };
+
+    // 先遍历父的所有key
+    for (var key in parent) {
+      if (parent.hasOwnProperty(key)) {
+        mergeField(key);
+      }
+    }
+
+    // 再遍历父亲上没有的儿子上的key
+    for (var _key in child) {
+      // 父亲上不存在的key
+      if (!parent.hasOwnProperty(_key)) {
+        mergeField(_key);
+      }
+    }
+    function mergeField(key) {
+      // 策略上有就走策略模式，没有就走默认
+      if (strats[key]) {
+        options[key] = strats[key](parent[key], child[key]);
+      } else {
+        // 策略没有提供，就走默认策略；以儿子为主
+        // 优先考虑儿子上的属性，再采用父亲的属性
+        options[key] = child[key] || parent[key];
+      }
+    }
+    return options;
+  }
+
+  function initGlobalAPI(Vue) {
+    // Vue的静态属性
+    Vue.options = {};
+
+    // Vue的静态方法，把选项合并到了Vue.options上
+    Vue.mixin = function (mixin) {
+      // this是谁？
+      // 我们期望将用户的选项mixin和全局的Vue.options按照一定的策略合并
+      // 第一次 全局空对象{} 和 用户传的{created: function(){}}合并 => {created: [fn]}
+      // 第二次 第一次合并的结果{created: [fn]} 和 用户传的{created: function(){}}合并  => {created: [fn, fn]}
+      this.options = mergeOptions(this.options, mixin);
+      // 为了链式调用
+      return this;
+    };
+  }
+
   function _iterableToArrayLimit(arr, i) {
     var _i = null == arr ? null : "undefined" != typeof Symbol && arr[Symbol.iterator] || arr["@@iterator"];
     if (null != _i) {
@@ -1083,6 +1161,16 @@
   // render函数会产生虚拟DOM(使用响应式数据)
   // 根据虚拟DOM，生成真实DOM
 
+  // 调用钩子函数
+  function callHook(vm, hook) {
+    var handlers = vm.$options[hook];
+    if (handlers) {
+      handlers.forEach(function (handler) {
+        return handler.call(vm);
+      });
+    }
+  }
+
   function initMixin(Vue) {
     // 通过原型prototype给Vue增加init方法
     Vue.prototype._init = function (options) {
@@ -1091,10 +1179,19 @@
 
       // 我们使用vue的时候，$nextTick, $data, $attr...以$开头的都表示Vue的内置属性
       var vm = this;
-      vm.$options = options; // 将用户的选项挂载到实例上
+
+      // 用全局options(Vue.options)和用户的options来合并merge
+      // 我们定义的全局指令和过滤器等等都会挂载到实例上
+      vm.$options = mergeOptions(this.constructor.options, options); // 将用户的选项挂载到实例上
+
+      // 在initState之前调用beforeCreate
+      callHook(vm, "beforeCreate");
 
       // 初始化状态
       initState(vm);
+
+      // 在initState之后调用created
+      callHook(vm, "created");
       if (options.el) {
         vm.$mount(options.el); // 实现数据的挂载
       }
@@ -1146,6 +1243,10 @@
   Vue.prototype.$nextTick = nextTick;
   initMixin(Vue); // 扩展了_init方法
   initLifeCycle(Vue); // 扩展了生命周期方法
+
+  // 前面都是扩展实例方法
+  // 底下是扩展静态方法，等会抽取出去单独文件
+  initGlobalAPI(Vue);
 
   return Vue;
 
