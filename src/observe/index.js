@@ -3,6 +3,17 @@ import Dep from "./dep";
 class Observer {
   // 观测值
   constructor(value) {
+    /**
+     * data() {
+     *    return {
+     *      arr: [1, 2, 3, { a: 1 }],
+     *      obj: { b: 1 },
+     *    };
+     *  },
+     */
+    // 给每个对象增加依赖收集: 给arr和boj增加依赖收集
+    this.dep = new Dep();
+
     // 给所有响应式数据增加标识，并且可以在响应式上获取Observer实例上的方法
     // 如果数据上已经有了__ob__标识，证明已经被代理过了
     // 增加__ob__属性为this，目的是可以在value上取到this从而调用Observer类上的方法
@@ -45,12 +56,26 @@ class Observer {
   }
 }
 
+// 对数组的每一项进行依赖收集
+// 深层次的嵌套会递归，递归多了性能会差，不存在的属性监控不到，存在的属性要重新方法；vue3 => proxy
+function dependArray(value) {
+  for (let i = 0; i < value.length; i++) {
+    let current = value[i];
+    current.__ob__ && current.__ob__.dep.depend();
+    // 如果item仍然是数组，递归进行依赖收集
+    if (Array.isArray(current)) {
+      dependArray(current);
+    }
+  }
+}
+
 // 要暴露的方法，所以不能放到Observer类里面
 // 闭包
 export function defineReactive(data, key, value) {
   // 深度属性劫持
   // 如果value还是object类型，继续调用observe进行递归劫持
-  observe(value);
+  // 返回的childOb上有dep属性，用来收集依赖
+  let childOb = observe(value);
 
   // 每一个属性都有一个dep
   let dep = new Dep();
@@ -65,6 +90,15 @@ export function defineReactive(data, key, value) {
       if (Dep.target) {
         // 让这个属性的收集器记住当前的watcher
         dep.depend();
+        if (childOb) {
+          // 让数组和对象本身也要实现依赖收集
+          childOb.dep.depend();
+
+          // 如果当前value是数组，也需要对数组的每个成员进行依赖收集
+          if (Array.isArray(value)) {
+            dependArray(value);
+          }
+        }
       }
 
       // 取值的时候会执行get

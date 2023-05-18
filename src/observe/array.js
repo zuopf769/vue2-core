@@ -47,7 +47,14 @@ methods.forEach((method) => {
         break;
     }
     // 对数组类型的数据进行观察劫持
-    if (inserted) ob.observeArray(inserted); // 对新增的数据（数组）再次进行观测劫持
+    if (inserted) {
+      // 对新增的数据（数组）再次进行观测劫持
+      ob.observeArray(inserted);
+    }
+
+    // 数组变化了，通知相应的watcher实现更新逻辑
+    ob.dep.notify();
+
     return result;
   };
 });

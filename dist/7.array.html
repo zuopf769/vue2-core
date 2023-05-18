@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.9/vue.js"></script> -->
+    <script src="./vue.js"></script>
+  </head>
+  <body>
+    <!--{{arr}}取值的时候会调用JSON.stringfy()会对数组中的对象取值 所以会进行依赖收集-->
+    <!--_v(_s(arr))-->
+    <div id="app">
+      <div id="wapper">{{arr}}{{obj}}</div>
+    </div>
+    <script>
+      let vm = new Vue({
+        data() {
+          return {
+            arr: [1, 2, 3, { a: 1 }, [4, 5, 6]], // 给数组本身arr增加dep依赖更新；后续如果用户新增了数组某一项，通过整体修改arr的方式也可以出发更新
+            obj: { a: 1 }, // 给对象本身obj增加dep依赖更新; 如果后续用户添加了属性，通过整体修改obj的方式可以触发更新
+          };
+        },
+        el: "#app", // 我们要将数据解析到el元素上
+      });
+
+      // vm.arr[0] = 100; // 这种方式能监控到吗？不会导致视图刷新。vue只重写了数组方法
+      // vm.arr.length = 100; // 这种方式能监控到吗？不会导致视图刷新。vue没有监控数组长度变化
+
+      // vm.arr.push(100); // 会导致视图刷新。vue重写了push方法
+
+      // arr这个key也是响应式的，改arr也能响应式；arr这个key有set和get
+      // console.log(vm._data);
+      // vm.arr = [4, 5, 6];
+
+      // 试图可以更新。因为{ a: 1 }被监控了
+      // {{arr}}取值的时候会调用JSON.stringfy()会对数组中的对象取值 所以会进行依赖收集
+      // vm.arr[3].a = 2;
+
+      // 为什么视图不更新
+      // 注意这里 你改变的不是arr属性，而是arr对象的数组对象
+      // vm.arr.push(100);
+
+      /*
+      setTimeout(() => {
+        vm.arr.push(100);
+      }, 2000);
+      */
+
+      // 对已存在的属性可以监控更新
+      // vm.obj.a = 2;
+
+      // 对应不存在的属性不能监控更新
+      // vue中提供了vm.$set()来实现新增属性的监控更新
+      /*
+      setTimeout(() => {
+        // 直接加属性不能监控更新
+        vm.obj.b = 2;
+        // 必须手动通知下
+        vm.obj.__ob__.dep.notify(); // $set的原理
+      }, 2000);
+      */
+
+      setTimeout(() => {
+        vm.arr[4].push(100);
+      }, 2000);
+    </script>
+  </body>
+</html>
