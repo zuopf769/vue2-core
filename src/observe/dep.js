@@ -41,4 +41,21 @@ class Dep {
 // 记录
 Dep.target = null;
 
+// 用栈来维护watcher
+let stack = [];
+
+// 渲染watcher先入栈，然后计算属性watcher入栈
+export function pushTarget(watcher) {
+  // 压栈
+  stack.push(watcher);
+  Dep.target = watcher;
+}
+
+export function popTarget() {
+  // 出栈
+  stack.pop();
+  // 如果最后一个弹栈后，取最后一个就Dep.target = undefined
+  Dep.target = stack[stack.length - 1];
+}
+
 export default Dep;

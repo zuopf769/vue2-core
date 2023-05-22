@@ -19,7 +19,7 @@ export function initMixin(Vue) {
     // 在initState之前调用beforeCreate
     callHook(vm, "beforeCreate");
 
-    // 初始化状态
+    // 初始化状态；初始化计算属性；初始化watch
     initState(vm);
 
     // 在initState之后调用created

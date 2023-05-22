@@ -123,6 +123,7 @@ export function mountComponent(vm, el) {
 
   // 首次渲染的时候会收集依赖
   // 更新的时候会再次收集
+  // updateComponent会立即执行
   let watcher = new Watcher(vm, updateComponent, true); // true标识一个渲染watcher
   console.log(watcher);
 

@@ -1,4 +1,4 @@
-import Dep from "./dep";
+import Dep, { popTarget, pushTarget } from "./dep";
 
 // 观察者模式
 // Watcher观察者，观察某个属性，某个属性的值发生变化后 观察者就update
@@ -27,18 +27,33 @@ class Watcher {
     // 2. 一些清理工作需要用到: 当组件卸载的时候会把该组件的所有依赖deps清除掉
     this.deps = [];
     this.depsId = new Set();
+    // 懒执行
+    this.lazy = options.lazy;
+    // 缓存值，脏值检测；lazy为true的话dirty就是true；
+    this.dirty = this.lazy;
 
-    this.get();
+    // 如果lazy为true, get不会立即执行了
+    this.lazy ? undefined : this.get();
+  }
+
+  evaluate() {
+    // 获取到用户函数fn的返回值，并且标识为不脏
+    this.value = this.get();
+    this.dirty = false;
   }
 
   get() {
     // 先把当前的watcher放到 Dep.target上
     // A组件渲染的时候会把A组件的watcher放上来，B组件渲染的时候会把B组件的watcher放上来，
-    Dep.target = this;
+    // Dep.target = this;
+    pushTarget(this);
     // 调用vm._update(vm._render()) 就会去vm上取name和age的值
-    this.getter();
+    const value = this.getter.call(this.vm);
     // 渲染完毕后就清空
-    Dep.target = null;
+    // Dep.target = null;
+    popTarget();
+    // 计算属性的getter执行后的返回值，渲染watcher的fn没有返回值
+    return value;
   }
 
   // 一个组件 对应着多个属性 重复的属性不应该重复记录 name可能会被引用几次
@@ -52,15 +67,28 @@ class Watcher {
     }
   }
 
+  depend() {
+    let i = this.deps.length;
+    while (i--) {
+      // 让计算属性watcher也收集渲染watcher
+      this.deps[i].depend();
+    }
+  }
+
   update() {
     // console.log("update");
 
     // 执行多次，修改为下面的方面
     // 重新渲染
     // this.get();
-
-    // 解决修改属性执行多次，把watcher放到队列中，然后一次执行
-    queueWatcher(this);
+    // 如果是计算属性
+    if (this.lazy) {
+      // 依赖得值发生变化了，就标识计算属性是脏值了
+      this.dirty = true;
+    } else {
+      // 解决修改属性执行多次，把watcher放到队列中，然后一次执行
+      queueWatcher(this);
+    }
   }
 
   // 真实的渲染

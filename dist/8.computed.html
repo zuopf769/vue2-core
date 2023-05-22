@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.9/vue.js"></script> -->
+    <script src="./vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div id="wapper">{{fullname}} {{fullname}} {{fullname}}</div>
+    </div>
+    <script>
+      // 计算属性的原理
+      let vm = new Vue({
+        data() {
+          return {
+            firstname: "pengfei",
+            lastname: "zuo",
+            age: 30,
+          };
+        },
+        el: "#app", // 我们要将数据解析到el元素上
+        // 计算属性就是使用defineProperty给vm上定义一个属性变量
+        // 计算属性：依赖的值发生变化后才会重新执行用户的方法；计算属性维护一个dirty属性；默认计算属性不会立即执行（lazy特性）
+        // 计算属性：fn是计算属性的get方法
+        // 计算属性：计算属性watcher的fn啥时候执行呢？就是在template中{{fullname}}使用的时候才执行fn
+        // 计算属性也是一个watcher，默认会创建一个渲染watcher
+        computed: {
+          newAge() {
+            return this.age;
+          },
+          // 按方法得使用方式，相当于defineProperty中的get方法
+          fullname() {
+            console.log("run fullname");
+            return this.firstname + this.lastname + this.newAge;
+          },
+          // 对象方式提供set和get
+          fullname2: {
+            // defineProperty中的get方法
+            get() {
+              console.log("run fullname2");
+              return this.firstname + this.lastname + "2";
+            },
+            // defineProperty中的set方法
+            set(newVal) {
+              console.log("newVal: ", newVal);
+            },
+          },
+        },
+      });
+
+      // setTimeout(() => {
+      //   vm.fullname2 = "zhangsan";
+      // }, 1000);
+
+      setTimeout(() => {
+        // 计算属性依赖的属性变化后也会导致视图重新刷新
+        // vm.firstname = "xxx"; // 会执行什么？执行计算属性watcher更新操作；把dirty再变成true
+        vm.age = 35;
+      }, 1000);
+    </script>
+  </body>
+</html>
