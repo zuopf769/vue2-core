@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.9/vue.js"></script> -->
+    <script src="./vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div id="wapper">firstname: {{firstname}}</div>
+    </div>
+    <script>
+      // 计算属性的原理
+      let vm = new Vue({
+        el: "#app", // 我们要将数据解析到el元素上
+        data() {
+          return {
+            firstname: "pengfei",
+            lastname: "zuo",
+            age: 30,
+          };
+        },
+        methods: {
+          fn(newValue, oldValue) {
+            console.log("methods fn", newValue, oldValue);
+          },
+        },
+        watch: {
+          firstname(newValue, oldValue) {
+            console.log("watch firstname", newValue, oldValue);
+          },
+        },
+      });
+
+      // watch底层的实现原理就是vm.$watch方法；上面options里面的watch都会转换成vm.$watch方法
+      // 第一个参数可以是一个字符串，也可以是一个工厂方法
+      vm.$watch(
+        () => vm.age,
+        (newValue, oldValue) => {
+          console.log("watch age", newValue, oldValue);
+        }
+      );
+
+      vm.$watch("firstname", (newValue, oldValue) => {
+        console.log("$watch firstname", newValue, oldValue);
+      });
+
+      setTimeout(() => {
+        vm.firstname = "xiaopeng";
+      }, 2000);
+    </script>
+  </body>
+</html>

@@ -64,11 +64,11 @@ function patch(oldVnode, vnode) {
 export function initLifeCycle(Vue) {
   // 把_render函数生成的虚拟DOM，生成真实DOM
   Vue.prototype._update = function (vnode) {
-    console.log("_update", vnode);
+    // console.log("_update", vnode);
     const vm = this;
     const el = vm.$el;
 
-    console.log("el", el);
+    // console.log("el", el);
 
     // patch既有初始化的功能，又有更新的功能
     vm.$el = patch(el, vnode);
@@ -76,7 +76,7 @@ export function initLifeCycle(Vue) {
 
   // 生成虚拟DOM
   Vue.prototype._render = function () {
-    console.log("_render");
+    // console.log("_render");
     let vm = this;
     // 渲染的时候会从实例vm上取值，我们就将属性和视图绑定在了一起
     // 为什么要call?希望render函数里面的with的this指向vm
@@ -125,7 +125,7 @@ export function mountComponent(vm, el) {
   // 更新的时候会再次收集
   // updateComponent会立即执行
   let watcher = new Watcher(vm, updateComponent, true); // true标识一个渲染watcher
-  console.log(watcher);
+  // console.log(watcher);
 
   // 2. 根据虚拟DOM，生成真实DOM
 

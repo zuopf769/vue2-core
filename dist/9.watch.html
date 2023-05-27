@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.9/vue.js"></script> -->
+    <script src="./vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div id="wapper">firstname: {{firstname}}</div>
+      <div id="wapper">lastname: {{lastname}}</div>
+      <div id="wapper">age: {{age}}</div>
+    </div>
+    <script>
+      // 计算属性的原理
+      let vm = new Vue({
+        el: "#app", // 我们要将数据解析到el元素上
+        data() {
+          return {
+            firstname: "pengfei",
+            lastname: "zuo",
+            age: 30,
+          };
+        },
+        methods: {
+          fn(newValue, oldValue) {
+            console.log("methods fn", newValue, oldValue);
+          },
+        },
+        watch: {
+          // 第一种写法：直接一个函数
+          firstname(newValue, oldValue) {
+            console.log("watch firstname", newValue, oldValue);
+          },
+          // 第二种写法：数组写法
+          // 第三种写法：方法可以是methods里面的一个方法名例如'fn'：告诉watch我要调用的方法名是'fn'
+          lastname: [
+            "fn",
+            (newValue, oldValue) => {
+              console.log("watch lastname", newValue, oldValue);
+            },
+            (newValue, oldValue) => {
+              console.log("watch lastname", newValue, oldValue);
+            },
+          ],
+        },
+      });
+
+      // watch底层的实现原理就是vm.$watch方法；上面options里面的watch都会转换成vm.$watch方法
+      // 第一个参数可以是一个字符串，也可以是一个工厂方法
+      vm.$watch(
+        () => vm.age,
+        (newValue, oldValue) => {
+          console.log("watch age", newValue, oldValue);
+        }
+      );
+
+      vm.$watch("vm.firstname", (newValue, oldValue) => {
+        console.log("watch firstname", newValue, oldValue);
+      });
+      setTimeout(() => {
+        vm.firstname = "xiaopeng";
+        vm.lastname = "you";
+        vm.age = 39;
+      }, 2000);
+    </script>
+  </body>
+</html>

@@ -12,28 +12,42 @@ let id = 0;
 
 // 不同组件有不同的watcher，目前只有一个，渲染根实例的
 class Watcher {
-  constructor(vm, fn, options) {
+  constructor(vm, exprOrFn, options, cb) {
     // 唯一标识符
     this.id = id++;
     // 组件实例
     this.vm = vm;
     // 渲染watcher
     this.renderWatcher = options;
-    // callback
-    this.getter = fn; // getter意味着调用这个函数可以发生取值操作
+
+    if (typeof exprOrFn === "string") {
+      // 字符串转函数；不要用箭头函数，避免作用域问题
+      this.getter = function () {
+        return vm[exprOrFn]; // vm.firstname
+      };
+    } else {
+      // callback
+      this.getter = exprOrFn; // getter意味着调用这个函数可以发生取值操作
+    }
+
     // 记录dep
     // watcher为什么要记录deps?
     // 1. 后续实现计算属性会用到
     // 2. 一些清理工作需要用到: 当组件卸载的时候会把该组件的所有依赖deps清除掉
     this.deps = [];
     this.depsId = new Set();
+    // callback回调函数
+    this.cb = cb;
     // 懒执行
     this.lazy = options.lazy;
     // 缓存值，脏值检测；lazy为true的话dirty就是true；
     this.dirty = this.lazy;
+    // 用户自定watcher
+    this.user = options.user;
 
     // 如果lazy为true, get不会立即执行了
-    this.lazy ? undefined : this.get();
+    // oldValue
+    this.value = this.lazy ? undefined : this.get();
   }
 
   evaluate() {
@@ -93,8 +107,14 @@ class Watcher {
 
   // 真实的渲染
   run() {
-    console.log("run");
-    this.get(); // vm.name = 最后一次的值
+    let oldValue = this.value;
+    // console.log("run");
+    // 渲染的时候使用最新的vm来渲染的
+    let newValue = this.get(); // vm.name = 最后一次的值
+    // 如果是用户watcher还需要调用回调并传入newValue和oldValue
+    if (this.user) {
+      this.cb.call(this.vm, newValue, oldValue);
+    }
   }
 }
 
@@ -124,7 +144,7 @@ function queueWatcher(watcher) {
   if (!has[id]) {
     has[id] = true;
     queue.push(watcher);
-    console.log("watcher queue", queue);
+    // console.log("watcher queue", queue);
     // 不管我们的update执行多少次，但是最终只执行一轮刷新操作
     // 第一个属性过来就设置定时器，第二、三个属性过来的时候就不设置定时器了
     if (!pending) {

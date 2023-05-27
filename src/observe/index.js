@@ -109,7 +109,7 @@ export function defineReactive(data, key, value) {
       // 设值的时候会执行set
       if (newValue == value) return;
 
-      console.log(`set key ${key} ${newValue}`);
+      // console.log(`set key ${key} ${newValue}`);
 
       // 再次劫持
       // 深度属性劫持

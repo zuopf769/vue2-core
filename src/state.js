@@ -14,6 +14,11 @@ export function initState(vm) {
   if (opts.computed) {
     initComputed(vm);
   }
+
+  // 初始化watch方法
+  if (opts.watch) {
+    initWatch(vm);
+  }
 }
 
 // 数据代理
@@ -83,8 +88,8 @@ function defineComputed(target, key, userDef) {
   const getter = typeof userDef === "function" ? userDef : userDef.get;
   const setter = userDef.get || (() => {});
 
-  console.log(getter);
-  console.log(setter);
+  // console.log(getter);
+  // console.log(setter);
 
   // 给vm定义属性
   Object.defineProperty(target, key, {
@@ -114,4 +119,42 @@ function createComputedGetter(key) {
     // 最后返回的是watcher上的value
     return watcher.value;
   };
+}
+
+function createWatcher(vm, key, handler) {
+  // 字符串、函数；数组已经在上层处理过了；我们暂时不考虑对象
+  if (typeof handler === "string") {
+    handler = vm.$options.methods[handler];
+  }
+
+  // $vm.$watch()
+  return vm.$watch(key, handler);
+}
+
+// 初始化watch
+function initWatch(vm) {
+  let watch = vm.$options.watch;
+  // console.log("initWatch", watch);
+  for (let key in watch) {
+    // handler分字符串、函数、数组
+    // vue中handler还可能是对象；我们的实现中先不考虑
+    /***
+     * watch: {
+     *   firstname: {
+     *      handler: function() {
+     *      },
+     *      immediate: true
+     *   }
+     * }
+     *
+     */
+    const handler = watch[key];
+    if (Array.isArray(handler)) {
+      for (let i = 0; i < handler.length; i++) {
+        createWatcher(vm, key, handler[i]);
+      }
+    } else {
+      createWatcher(vm, key, handler);
+    }
+  }
 }

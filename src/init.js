@@ -59,7 +59,7 @@ export function initMixin(Vue) {
     // runtime运行时是不包含模板编译的，整个编译是在打包的过程中通过loader编译.vue文件的；
     // 用runtime的时候不能使用template
 
-    console.log("render", options.render);
+    // console.log("render", options.render);
 
     // 挂载组件
     mountComponent(vm, el);

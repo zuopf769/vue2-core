@@ -417,7 +417,8 @@
       set: function set(newValue) {
         // 设值的时候会执行set
         if (newValue == value) return;
-        console.log("set key ".concat(key, " ").concat(newValue));
+
+        // console.log(`set key ${key} ${newValue}`);
 
         // 再次劫持
         // 深度属性劫持
@@ -458,7 +459,7 @@
 
   // 不同组件有不同的watcher，目前只有一个，渲染根实例的
   var Watcher = /*#__PURE__*/function () {
-    function Watcher(vm, fn, options) {
+    function Watcher(vm, exprOrFn, options, cb) {
       _classCallCheck(this, Watcher);
       // 唯一标识符
       this.id = id++;
@@ -466,21 +467,34 @@
       this.vm = vm;
       // 渲染watcher
       this.renderWatcher = options;
-      // callback
-      this.getter = fn; // getter意味着调用这个函数可以发生取值操作
+      if (typeof exprOrFn === "string") {
+        // 字符串转函数；不要用箭头函数，避免作用域问题
+        this.getter = function () {
+          return vm[exprOrFn]; // vm.firstname
+        };
+      } else {
+        // callback
+        this.getter = exprOrFn; // getter意味着调用这个函数可以发生取值操作
+      }
+
       // 记录dep
       // watcher为什么要记录deps?
       // 1. 后续实现计算属性会用到
       // 2. 一些清理工作需要用到: 当组件卸载的时候会把该组件的所有依赖deps清除掉
       this.deps = [];
       this.depsId = new Set();
+      // callback回调函数
+      this.cb = cb;
       // 懒执行
       this.lazy = options.lazy;
       // 缓存值，脏值检测；lazy为true的话dirty就是true；
       this.dirty = this.lazy;
+      // 用户自定watcher
+      this.user = options.user;
 
       // 如果lazy为true, get不会立即执行了
-      this.lazy ? undefined : this.get();
+      // oldValue
+      this.value = this.lazy ? undefined : this.get();
     }
     _createClass(Watcher, [{
       key: "evaluate",
@@ -548,8 +562,14 @@
     }, {
       key: "run",
       value: function run() {
-        console.log("run");
-        this.get(); // vm.name = 最后一次的值
+        var oldValue = this.value;
+        // console.log("run");
+        // 渲染的时候使用最新的vm来渲染的
+        var newValue = this.get(); // vm.name = 最后一次的值
+        // 如果是用户watcher还需要调用回调并传入newValue和oldValue
+        if (this.user) {
+          this.cb.call(this.vm, newValue, oldValue);
+        }
       }
     }]);
     return Watcher;
@@ -580,7 +600,7 @@
     if (!has[id]) {
       has[id] = true;
       queue.push(watcher);
-      console.log("watcher queue", queue);
+      // console.log("watcher queue", queue);
       // 不管我们的update执行多少次，但是最终只执行一轮刷新操作
       // 第一个属性过来就设置定时器，第二、三个属性过来的时候就不设置定时器了
       if (!pending) {
@@ -669,6 +689,11 @@
     if (opts.computed) {
       initComputed(vm);
     }
+
+    // 初始化watch方法
+    if (opts.watch) {
+      initWatch(vm);
+    }
   }
 
   // 数据代理
@@ -735,10 +760,11 @@
     }
   }
   function defineComputed(target, key, userDef) {
-    var getter = typeof userDef === "function" ? userDef : userDef.get;
+    typeof userDef === "function" ? userDef : userDef.get;
     var setter = userDef.get || function () {};
-    console.log(getter);
-    console.log(setter);
+
+    // console.log(getter);
+    // console.log(setter);
 
     // 给vm定义属性
     Object.defineProperty(target, key, {
@@ -769,6 +795,43 @@
       // 最后返回的是watcher上的value
       return watcher.value;
     };
+  }
+  function createWatcher(vm, key, handler) {
+    // 字符串、函数；数组已经在上层处理过了；我们暂时不考虑对象
+    if (typeof handler === "string") {
+      handler = vm.$options.methods[handler];
+    }
+
+    // $vm.$watch()
+    return vm.$watch(key, handler);
+  }
+
+  // 初始化watch
+  function initWatch(vm) {
+    var watch = vm.$options.watch;
+    // console.log("initWatch", watch);
+    for (var key in watch) {
+      // handler分字符串、函数、数组
+      // vue中handler还可能是对象；我们的实现中先不考虑
+      /***
+       * watch: {
+       *   firstname: {
+       *      handler: function() {
+       *      },
+       *      immediate: true
+       *   }
+       * }
+       *
+       */
+      var handler = watch[key];
+      if (Array.isArray(handler)) {
+        for (var i = 0; i < handler.length; i++) {
+          createWatcher(vm, key, handler[i]);
+        }
+      } else {
+        createWatcher(vm, key, handler);
+      }
+    }
   }
 
   // 标签名：第一个字符+后面的字符；第一个字符不能以数字开头
@@ -1021,7 +1084,8 @@
       // 包含{{}}的类型
       // 变量name需要转成字符串_s(name) 用+拼接
       // {{name}} hello {{name}} => _v(_s(name) + 'hello' + _s(name))
-      console.log("文本节点：", text);
+      // console.log("文本节点：", text);
+
       var tokens = [];
       var match;
       // exec方法的特殊点：
@@ -1254,10 +1318,11 @@
   function initLifeCycle(Vue) {
     // 把_render函数生成的虚拟DOM，生成真实DOM
     Vue.prototype._update = function (vnode) {
-      console.log("_update", vnode);
+      // console.log("_update", vnode);
       var vm = this;
       var el = vm.$el;
-      console.log("el", el);
+
+      // console.log("el", el);
 
       // patch既有初始化的功能，又有更新的功能
       vm.$el = patch(el, vnode);
@@ -1265,7 +1330,7 @@
 
     // 生成虚拟DOM
     Vue.prototype._render = function () {
-      console.log("_render");
+      // console.log("_render");
       var vm = this;
       // 渲染的时候会从实例vm上取值，我们就将属性和视图绑定在了一起
       // 为什么要call?希望render函数里面的with的this指向vm
@@ -1308,8 +1373,8 @@
     // 首次渲染的时候会收集依赖
     // 更新的时候会再次收集
     // updateComponent会立即执行
-    var watcher = new Watcher(vm, updateComponent, true); // true标识一个渲染watcher
-    console.log(watcher);
+    new Watcher(vm, updateComponent, true); // true标识一个渲染watcher
+    // console.log(watcher);
 
     // 2. 根据虚拟DOM，生成真实DOM
 
@@ -1390,7 +1455,7 @@
       // runtime运行时是不包含模板编译的，整个编译是在打包的过程中通过loader编译.vue文件的；
       // 用runtime的时候不能使用template
 
-      console.log("render", options.render);
+      // console.log("render", options.render);
 
       // 挂载组件
       mountComponent(vm, el);
@@ -1411,6 +1476,19 @@
   // 前面都是扩展实例方法
   // 底下是扩展静态方法，等会抽取出去单独文件
   initGlobalAPI(Vue);
+
+  // watch最终调用的$watch方法
+  // options参数可以是 dep: true深度监听;immediate立即执行
+  Vue.prototype.$watch = function (exprOrFn, cb) {
+    // console.log("$watch", exprOrFn, cb);
+
+    // 'firstname' 字符串需要转换成() => vm.firstname；在什么地方转？在Watcher里面转
+    // 当firstname变化的时候，就执行cb
+    // { user: true }用户自定义的watcher
+    new Watcher(this, exprOrFn, {
+      user: true
+    }, cb);
+  };
 
   return Vue;
 

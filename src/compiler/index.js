@@ -25,7 +25,7 @@ function gen(node) {
     // 包含{{}}的类型
     // 变量name需要转成字符串_s(name) 用+拼接
     // {{name}} hello {{name}} => _v(_s(name) + 'hello' + _s(name))
-    console.log("文本节点：", text);
+    // console.log("文本节点：", text);
 
     let tokens = [];
     let match;
