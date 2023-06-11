@@ -29,7 +29,7 @@ export function createElm(vnode) {
 // 1. 老的有新的没有，就需要删掉老的
 // 2. 老的没有新的有，就需要追加
 // 3. 老的有新的也有，就替换成新的属性值
-export function patchProps(el, oldProps, newProps = {}) {
+export function patchProps(el, oldProps = {}, newProps = {}) {
   // 1. 老的有新的没有，就需要删掉老的
   // 属性 <div a=1
   for (let key in oldProps) {
@@ -150,7 +150,6 @@ function updateChildren(el, oldChildren, newChildren) {
   // 我们需要针对这些场景做些优化： 不是在表头就是表尾操作，最差的是 reverse sort
   // vue2采用的是双指针的方式，比较两个节点
   // console.log(oldChildren, newChildren);
-
   let oldStartIndex = 0;
   let newStartIndex = 0;
   let oldEndIndex = oldChildren.length - 1;
@@ -165,5 +164,59 @@ function updateChildren(el, oldChildren, newChildren) {
   while (oldStartIndex <= oldEndIndex && newStartIndex <= newEndIndex) {
     // 只要双方有一方头指针大于尾部指针则退出循环
     // 只要有一方不满足条件就退出
+
+    // 比较开头节点 头头比对
+    if (isSameVnode(oldStartVnode, newStartVnode)) {
+      // 如果是相同节点，则递归比较子节点
+      patchVnode(oldStartVnode, newStartVnode);
+      oldStartVnode = oldChildren[++oldStartIndex];
+      newStartVnode = newChildren[++newStartIndex];
+    }
+
+    // 比较结尾节点 尾尾比对
+    if (isSameVnode(oldEndVnode, newEndVnode)) {
+      // 如果是相同节点，则递归比较子节点
+      patchVnode(oldEndVnode, newEndVnode);
+      oldEndVnode = oldChildren[--oldEndIndex];
+      newEndVnode = newChildren[--newEndIndex];
+    }
+
+    // 交叉比对： 头头不一样，尾尾不一样，就老头和新尾比，老尾和新头
+  }
+
+  // 退出上面循环： 有一方已经比较完毕
+  // diff-2.jpeg 如果老的节点oldStartIndex已经越界了，新的后面还有几个节点就插进去
+  if (newStartIndex <= newEndIndex) {
+    // 后面可能有一个节点，也可能多个节点
+    for (let i = newStartIndex; i <= newEndIndex; i++) {
+      // 这里可能是向后追加也可能是向前追加
+
+      let childEl = createElm(newChildren[i]);
+
+      /*
+      if (newChildren[++newEndIndex]) {
+        // 头部插入，尾指针挪到了前面
+        el.insertBefore(childEl, newChildren[++newEndIndex].el);
+      } else {
+        // 尾部插入，因为尾指针后面已经没有元素了
+        el.appendChild(createElm(newChildren[i]));
+      }
+      */
+
+      // 上面的简单写法
+      // 参照物
+      let anchor = newChildren[newEndIndex + 1]
+        ? newChildren[newEndIndex + 1].el
+        : null;
+      // anchor为null的时候则认为会是appendChild
+      el.insertBefore(childEl, anchor);
+    }
+  }
+
+  // diff-3.jpeg 如果新的已经越界，老的后面还剩几个就删除
+  if (oldStartIndex <= oldEndIndex) {
+    for (let i = oldStartIndex; i <= oldEndIndex; i++) {
+      el.removeChild(oldChildren[i].el);
+    }
   }
 }
