@@ -4,84 +4,6 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
-  // 策略模式
-  var strats = {};
-  var LIFECYCLES = ["beforeCreate", "created"];
-  LIFECYCLES.forEach(function (hook) {
-    strats[hook] = function (p, c) {
-      //子存在
-      if (c) {
-        // 子存在，父也存在（父存在那么父就是数组），就把子和父拼在一起
-        if (p) {
-          return p.concat(c);
-        } else {
-          // 子存在但是父不存在，则把儿子包装成数组
-          return [c];
-        }
-      } else {
-        // 子不存在只有父，直接返回父
-        return p;
-      }
-    };
-  });
-
-  // data的props merge策略
-  // strats.data = function (p, c) {};
-
-  // 计算属性的props merge策略
-  // strats.computed = function (p, c) {};
-
-  // ...剩下的策略
-
-  function mergeOptions(parent, child) {
-    var options = {};
-
-    // 不能这么做，这么做合并不出来数组；以为直接覆盖了 {created: [fn, fn]}
-    // let options = { ...parent, ...child };
-
-    // 先遍历父的所有key
-    for (var key in parent) {
-      if (parent.hasOwnProperty(key)) {
-        mergeField(key);
-      }
-    }
-
-    // 再遍历父亲上没有的儿子上的key
-    for (var _key in child) {
-      // 父亲上不存在的key
-      if (!parent.hasOwnProperty(_key)) {
-        mergeField(_key);
-      }
-    }
-    function mergeField(key) {
-      // 策略上有就走策略模式，没有就走默认
-      if (strats[key]) {
-        options[key] = strats[key](parent[key], child[key]);
-      } else {
-        // 策略没有提供，就走默认策略；以儿子为主
-        // 优先考虑儿子上的属性，再采用父亲的属性
-        options[key] = child[key] || parent[key];
-      }
-    }
-    return options;
-  }
-
-  function initGlobalAPI(Vue) {
-    // Vue的静态属性
-    Vue.options = {};
-
-    // Vue的静态方法，把选项合并到了Vue.options上
-    Vue.mixin = function (mixin) {
-      // this是谁？
-      // 我们期望将用户的选项mixin和全局的Vue.options按照一定的策略合并
-      // 第一次 全局空对象{} 和 用户传的{created: function(){}}合并 => {created: [fn]}
-      // 第二次 第一次合并的结果{created: [fn]} 和 用户传的{created: function(){}}合并  => {created: [fn, fn]}
-      this.options = mergeOptions(this.options, mixin);
-      // 为了链式调用
-      return this;
-    };
-  }
-
   function _iterableToArrayLimit(arr, i) {
     var _i = null == arr ? null : "undefined" != typeof Symbol && arr[Symbol.iterator] || arr["@@iterator"];
     if (null != _i) {
@@ -175,6 +97,462 @@
   function _toPropertyKey(arg) {
     var key = _toPrimitive(arg, "string");
     return typeof key === "symbol" ? key : String(key);
+  }
+
+  // 标签名：第一个字符+后面的字符；第一个字符不能以数字开头
+  // 字符串的两个\\是什么？表示转义，字符串中的转义，前一个\表示转义后面的\
+  var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*";
+  // (?:${ncname}\\:)?
+  // 第一个?:表示匹配但是不记住匹配项；
+  // 为啥不要记住匹配性，因为需要加()分组后表示前面一半是命名空间可有可无，但是又不想铺获$1的值
+  // https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Guide/Regular_expressions#special-non-capturing-parentheses
+  // (?:${ncname}\\:)? 第二个？表示可有可无
+  // 外面的分组
+  var qnameCapture = "((?:".concat(ncname, "\\:)?").concat(ncname, ")");
+
+  // 注意前面的开头^，必须是开始匹配
+  // <1_xxx 不能以数字开头
+  // <_xxx 自定义标签，都是以_开头 webcomponent
+  // <xxx
+  // <namespace:yyy 命名空间
+  var startTagOpen = new RegExp("^<".concat(qnameCapture)); // 标签开头的正则 捕获的内容是标签名
+  // console.log(startTagOpen);
+
+  // 注意前面的开头^，必须是开始匹配
+  // 匹配到的是</xxx>
+  var endTag = new RegExp("^<\\/".concat(qnameCapture, "[^>]*>")); // 匹配标签结尾的 </div>
+  // console.log(endTag);
+
+  // 注意前面的开头^，必须是开始匹配
+  // a=b 没有空格
+  // a = b =前后有空格
+  // <xx a = b a前面也有空格
+  // ([^\s"'<>\/=]+)表示前面的属性名或者属性值，除了"'<>那些字符都可以的字符
+  // <xxx disabled disabled属性只有前面的部分没有后面的部分（=xxx）
+  // (?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))? 第一个()为了后面加？表示属性值可有可无
+  // "([^"]*)"+ 以双引号包的非"的多个字符 <xx a = "b" 左边双引号右边双引号中间不是双引号就可以
+  // '([^']*)'+ 以单引号包的非'的多个字符 <xx a = 'b' 左边单引号右边单引号中间不是单引号就可以
+  // ([^\s"'=<>`]+) 除了\s"'=<>`的任意多个字符  <xx a = b 属性也可以不加单引号或者双引号
+  var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/; // 匹配属性的
+  // 第一个分组就是属性的key value就是分组3/分组4/分组5
+  // console.log(attribute);
+
+  // 注意前面的开头^，必须是开始匹配
+  // <div> <br/> 标签结束可能是> 也可能是/>
+  var startTagClose = /^\s*(\/?)>/; // 匹配标签结束的 >
+
+  // 对模版进行编译
+  // vue3不是采用的正则匹配了，是一个一个字符匹配
+  // 思路： 每解析一个标签就删除一个标签，每解析一个属性就删除一个属性；字符串被截取完了就结束了
+  function parseHTML(html) {
+    // 抽象语法树
+    /*
+    {
+      tag:'div',
+      type:1,
+      children:[{tag:'span',type:1,attrs:[],parent:'div对象'}],
+      attrs:[{name:'zf',age:10}],
+      parent:null
+    }
+    */
+
+    // 用于存放元素的栈，利用栈来创建一棵树
+    var stack = [];
+    // 节点类型-标签类型
+    var ELEMENT_TYPE = 1;
+    // 节点类型-文本类型
+    var TEXT_TYPE = 3;
+    // 根节点
+    var root;
+    // 指向栈中最后一个元素
+    var currentParent;
+    function createASTElement(tagName, attrs) {
+      return {
+        tag: tagName,
+        type: ELEMENT_TYPE,
+        children: [],
+        attrs: attrs,
+        parent: null
+      };
+    }
+
+    // 开始标签 <div><span><a>text</a></span></div>
+    function start(tagName, attrs) {
+      // console.log(tagName, attrs);
+      // 创建一个ast节点
+      var element = createASTElement(tagName, attrs);
+      // 看下是否是空树
+      if (!root) {
+        // 如果为空树，当前节点是树的根节点
+        root = element;
+      }
+      // 进栈构建父子关系
+      // 放在end时候执行该逻辑也行
+      // if (currentParent) {
+      //   element.parent = currentParent;
+      //   currentParent.children.push(element);
+      // }
+      stack.push(element);
+      // currentParent为栈中的最后一个元素
+      currentParent = element;
+    }
+
+    // 结束标签
+    function end(tagName) {
+      // console.log(tagName);
+      // 当前标签结束就弹栈；弹出栈中的最后一个元素
+      var element = stack.pop();
+      // currentParent为栈中的最后一个元素
+      currentParent = stack[stack.length - 1];
+      // 出栈构建父子关系
+      // 放在start入栈的时候执行该逻辑也行
+      if (currentParent) {
+        // 当前标签结束的这个元素的parent就是栈中的最后一个元素
+        element.parent = currentParent;
+        // 栈中的最后一个元素的儿子就是当前弹栈弹出来的节点
+        currentParent.children.push(element);
+      }
+    }
+
+    // 文本；文本不需要放到栈中，文本直接放到currentParent节点的children中
+    function chars(text) {
+      // console.log(text);
+      // 去掉空，可以优化为如果空格超过2个就删除2个以上的空格
+      text = text.replace(/\s/g, "");
+      // 不是节点直接的换行等空文本
+      if (text) {
+        // 文本节点直接放到当前栈的最后一个节点的children中，作为他的儿子
+        currentParent.children.push({
+          type: TEXT_TYPE,
+          text: text,
+          parent: currentParent
+        });
+      }
+    }
+
+    // html字符串前进n个字符：例如截掉已经捕获到的开头标签名、属性名和属性值、结束标签
+    function advance(n) {
+      html = html.substring(n);
+    }
+
+    // 解析开始标签，包括解析标签名和所有属性
+    function parseStartTag() {
+      // 匹配开始标签名
+      var start = html.match(startTagOpen);
+      if (start) {
+        var match = {
+          tagName: start[1],
+          attrs: []
+        };
+
+        // html字符串截掉tagName
+        // start[0] =>
+        advance(start[0].length);
+
+        // 捕获当前标签的所有属性
+        var attr, _end;
+        // 当前捕获到了属性标签并且不是当前标签的结束
+        while (!(_end = html.match(startTagClose)) && (attr = html.match(attribute))) {
+          match.attrs.push({
+            name: attr[1],
+            value: attr[3] || attr[4] || attr[5]
+          });
+          // attr[0] => id="app"
+          advance(attr[0].length);
+        }
+
+        // html字符当前到了当前标签的结束位置 > 或者 />
+        if (_end) {
+          // 移除结束位置
+          advance(_end[0].length);
+          // 返回匹配到的当前节点
+          return match;
+        }
+      }
+    }
+
+    // html字符串肯定是以<开头
+    while (html) {
+      var textEnd = html.indexOf("<");
+      // <div>hello</div> indexOf等于0
+      // 如果textEnd为0，表明当前html字符串处于开始标签处或者结束标签处
+      // 如果textEnd大于0，表明当前html字符串处于文本节点或者空文本处，>处于文本节点的结束位置
+      if (textEnd === 0) {
+        // 如果indexOf的索引是0，则说明是一个开始标签或者结束标签
+        // 解析开始标签：<div a=b c=d>
+        var startTagMatch = parseStartTag();
+        if (startTagMatch) {
+          start(startTagMatch.tagName, startTagMatch.attrs);
+          // 继续解析当前标签下的子开头标签
+          // 例如<div a=b c=d><span>txt</span></div>中的下一个标签是<span>
+          continue;
+        }
+
+        // 解析到最深的子节点的结束标签
+        // 例如<div a=b c=d><span>txt</span></div>中的</span>
+        var endTagMatch = html.match(endTag);
+        if (endTagMatch) {
+          advance(endTagMatch[0].length);
+          end(endTagMatch[1]);
+          continue;
+        }
+        // 先让他暂停
+        // break;
+      }
+
+      // 当前html字符串处于文本标签处，因为结束标签>的index>0
+      // 标签中的空格也是文本
+      // <div a=b c=d>
+      //    <span>txt</span>
+      // </div>
+      // hello</div> indexOf大于0 说明是文本
+      var text = void 0;
+      if (textEnd > 0) {
+        text = html.substring(0, textEnd);
+      }
+      if (text) {
+        advance(text.length);
+        chars(text);
+      }
+    }
+
+    // html为空
+    // console.log("html", html);
+    // root
+    // console.log("root", root);
+
+    return root;
+  }
+
+  var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{aaaaaa}} 匹配到的时候表达式的变量
+
+  /**
+   *
+   *  <div style="color:red">hello {{name}} <span></span></div>
+   *  render(){
+   *    return _c('div',{style:{color:'red'}},_v('hello'+_s(name) + 'age' + _s(age)),_c('span',undefined,''))
+   *  }
+   */
+
+  // 如果是文本就创建文本节点；如果是标签元素就调用codegen
+  function gen(node) {
+    // 标签类型
+    if (node.type == 1) {
+      return codegen(node);
+    } else {
+      // 文本类型节点
+      var text = node.text;
+      // 纯文本类型
+      if (!defaultTagRE.test(text)) {
+        return "_v(".concat(JSON.stringify(text), ")");
+      }
+      // 包含{{}}的类型
+      // 变量name需要转成字符串_s(name) 用+拼接
+      // {{name}} hello {{name}} => _v(_s(name) + 'hello' + _s(name))
+      // console.log("文本节点：", text);
+
+      var tokens = [];
+      var match;
+      // exec方法的特殊点：
+      // 现象：当正则表达式里面有g的时候，连续执行两次结果不一样: let reg = /a/g; reg.exec('abc'); reg.exec('abc');
+      // 原因：执行完一次后 reg.lastIndex变成1了，从第一个字符再往后找就找不到了
+      // 解决方法：每次重新执行exec的时候需要把reg.lastIndex重置为0
+      defaultTagRE.lastIndex = 0;
+      // 记录上一个匹配内容后的位置，算上字符串本身的长度
+      var lastIndex = 0;
+      while (match = defaultTagRE.exec(text)) {
+        // console.log("match", match);
+        // 匹配的位置
+        var index = match.index;
+
+        // 中间有一个文本字符串
+        // {{name}} hello {{age}} age
+        // lastIndex就是{{name}}的结尾位置，index就是{{name}}的开头位置
+        if (index > lastIndex) {
+          // 把中间的hello内容放到tokens中
+          tokens.push(JSON.stringify(text.slice(lastIndex, index)));
+        }
+        tokens.push("_s(".concat(match[1].trim(), ")"));
+        lastIndex = index + match[0].length;
+      }
+
+      // 最后的文本字符串
+      // {{name}} hello {{age}} age中的age
+      // 从{{age}}的结束位置截取到最后
+      if (text.length > lastIndex) {
+        tokens.push(JSON.stringify(text.slice(lastIndex)));
+      }
+
+      // console.log(tokens);
+
+      return "_v(".concat(tokens.join("+"), ")");
+    }
+  }
+
+  // 生成儿子节点
+  function getChildren(el) {
+    var children = el.children;
+    if (children) {
+      return "".concat(children.map(function (c) {
+        return gen(c);
+      }).join(","));
+    } else {
+      return false;
+    }
+  }
+
+  // 生成属性
+  // attrs [{name: 'id', value: 'wapper'}, {name: 'style', value: 'color: red; font-size: 50px'}]
+  function genProps(attrs) {
+    var str = "";
+    var _loop = function _loop() {
+      var attr = attrs[i];
+      // 如果attr名称是style
+      // {name: 'style', value: 'color: red; font-size: 50px'}
+      // 'color: red; font-size: 50px' => {color: red, font-size: 50px}
+      if (attr.name === "style") {
+        var obj = {};
+        attr.value.split(";").forEach(function (item) {
+          var _item$split = item.split(":"),
+            _item$split2 = _slicedToArray(_item$split, 2),
+            key = _item$split2[0],
+            value = _item$split2[1];
+          obj[key] = value;
+        });
+        attr.value = obj;
+      }
+      // JSON.stringify把vue转成字符串
+      str += "".concat(attr.name, ":").concat(JSON.stringify(attr.value), ",");
+    };
+    for (var i = 0; i < attrs.length; i++) {
+      _loop();
+    }
+    return "{".concat(str.slice(0, -1), "}");
+  }
+
+  // 生成code
+  function codegen(el) {
+    // console.log("el", el);
+
+    // 生成改节点的孩子，如果有孩子就加个,没孩子就不加了
+    var children = getChildren(el);
+    var code = "_c('".concat(el.tag, "', ").concat(el.attrs.length > 0 ? genProps(el.attrs) : "undefined").concat(children ? ",".concat(children) : "", "\n  )");
+    return code;
+  }
+  function compileToFunctions(template) {
+    // console.log(template);
+
+    // 1. 将template转换成AST语法树
+    var ast = parseHTML(template);
+    // console.log(ast);
+
+    // 2. 生成render方法，render方法执行后返回的结果就是虚拟DOM
+    var code = codegen(ast);
+    // console.log("code", code);
+
+    // 模版引擎的原理： with + new Function
+    // _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,''))
+    // 用with？为了取值方便；解决_c _v _s从哪儿取的问题，不用都得vm._c vm._v vm._s了
+    // 为啥是this而不是vm? render函数被谁调用就是谁； this是谁就从谁的上面取_c _v _s
+    var render = "with(this){return ".concat(code, "}");
+    var renderFn = new Function(render);
+    // 生成render函数，需要调用；分成两块：生成函数、调用函数
+    return renderFn;
+  }
+
+  // 最终的render函数
+  /*
+  function render() {
+    with (this) {
+      _c(
+        "div",
+        { style: { color: "red" } },
+        _v("hello" + _s(name)),
+        _c("span", undefined, "")
+      );
+    }
+  }
+  */
+
+  // render函数调用绑定作用域
+  // render.call(vm);
+
+  // 策略模式
+  var strats = {};
+  var LIFECYCLES = ["beforeCreate", "created"];
+  LIFECYCLES.forEach(function (hook) {
+    strats[hook] = function (p, c) {
+      //子存在
+      if (c) {
+        // 子存在，父也存在（父存在那么父就是数组），就把子和父拼在一起
+        if (p) {
+          return p.concat(c);
+        } else {
+          // 子存在但是父不存在，则把儿子包装成数组
+          return [c];
+        }
+      } else {
+        // 子不存在只有父，直接返回父
+        return p;
+      }
+    };
+  });
+
+  // data的props merge策略
+  // strats.data = function (p, c) {};
+
+  // 计算属性的props merge策略
+  // strats.computed = function (p, c) {};
+
+  // ...剩下的策略
+
+  function mergeOptions(parent, child) {
+    var options = {};
+
+    // 不能这么做，这么做合并不出来数组；以为直接覆盖了 {created: [fn, fn]}
+    // let options = { ...parent, ...child };
+
+    // 先遍历父的所有key
+    for (var key in parent) {
+      if (parent.hasOwnProperty(key)) {
+        mergeField(key);
+      }
+    }
+
+    // 再遍历父亲上没有的儿子上的key
+    for (var _key in child) {
+      // 父亲上不存在的key
+      if (!parent.hasOwnProperty(_key)) {
+        mergeField(_key);
+      }
+    }
+    function mergeField(key) {
+      // 策略上有就走策略模式，没有就走默认
+      if (strats[key]) {
+        options[key] = strats[key](parent[key], child[key]);
+      } else {
+        // 策略没有提供，就走默认策略；以儿子为主
+        // 优先考虑儿子上的属性，再采用父亲的属性
+        options[key] = child[key] || parent[key];
+      }
+    }
+    return options;
+  }
+
+  function initGlobalAPI(Vue) {
+    // Vue的静态属性
+    Vue.options = {};
+
+    // Vue的静态方法，把选项合并到了Vue.options上
+    Vue.mixin = function (mixin) {
+      // this是谁？
+      // 我们期望将用户的选项mixin和全局的Vue.options按照一定的策略合并
+      // 第一次 全局空对象{} 和 用户传的{created: function(){}}合并 => {created: [fn]}
+      // 第二次 第一次合并的结果{created: [fn]} 和 用户传的{created: function(){}}合并  => {created: [fn, fn]}
+      this.options = mergeOptions(this.options, mixin);
+      // 为了链式调用
+      return this;
+    };
   }
 
   // 我们希望重新数组的部分方法
@@ -833,384 +1211,23 @@
       }
     }
   }
+  function initSateMixin(Vue) {
+    // 扩展$nextTick方法
+    Vue.prototype.$nextTick = nextTick;
 
-  // 标签名：第一个字符+后面的字符；第一个字符不能以数字开头
-  // 字符串的两个\\是什么？表示转义，字符串中的转义，前一个\表示转义后面的\
-  var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*";
-  // (?:${ncname}\\:)?
-  // 第一个?:表示匹配但是不记住匹配项；
-  // 为啥不要记住匹配性，因为需要加()分组后表示前面一半是命名空间可有可无，但是又不想铺获$1的值
-  // https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Guide/Regular_expressions#special-non-capturing-parentheses
-  // (?:${ncname}\\:)? 第二个？表示可有可无
-  // 外面的分组
-  var qnameCapture = "((?:".concat(ncname, "\\:)?").concat(ncname, ")");
+    // watch最终调用的$watch方法
+    // options参数可以是 dep: true深度监听;immediate立即执行
+    Vue.prototype.$watch = function (exprOrFn, cb) {
+      // console.log("$watch", exprOrFn, cb);
 
-  // 注意前面的开头^，必须是开始匹配
-  // <1_xxx 不能以数字开头
-  // <_xxx 自定义标签，都是以_开头 webcomponent
-  // <xxx
-  // <namespace:yyy 命名空间
-  var startTagOpen = new RegExp("^<".concat(qnameCapture)); // 标签开头的正则 捕获的内容是标签名
-  // console.log(startTagOpen);
-
-  // 注意前面的开头^，必须是开始匹配
-  // 匹配到的是</xxx>
-  var endTag = new RegExp("^<\\/".concat(qnameCapture, "[^>]*>")); // 匹配标签结尾的 </div>
-  // console.log(endTag);
-
-  // 注意前面的开头^，必须是开始匹配
-  // a=b 没有空格
-  // a = b =前后有空格
-  // <xx a = b a前面也有空格
-  // ([^\s"'<>\/=]+)表示前面的属性名或者属性值，除了"'<>那些字符都可以的字符
-  // <xxx disabled disabled属性只有前面的部分没有后面的部分（=xxx）
-  // (?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))? 第一个()为了后面加？表示属性值可有可无
-  // "([^"]*)"+ 以双引号包的非"的多个字符 <xx a = "b" 左边双引号右边双引号中间不是双引号就可以
-  // '([^']*)'+ 以单引号包的非'的多个字符 <xx a = 'b' 左边单引号右边单引号中间不是单引号就可以
-  // ([^\s"'=<>`]+) 除了\s"'=<>`的任意多个字符  <xx a = b 属性也可以不加单引号或者双引号
-  var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/; // 匹配属性的
-  // 第一个分组就是属性的key value就是分组3/分组4/分组5
-  // console.log(attribute);
-
-  // 注意前面的开头^，必须是开始匹配
-  // <div> <br/> 标签结束可能是> 也可能是/>
-  var startTagClose = /^\s*(\/?)>/; // 匹配标签结束的 >
-
-  // 对模版进行编译
-  // vue3不是采用的正则匹配了，是一个一个字符匹配
-  // 思路： 每解析一个标签就删除一个标签，每解析一个属性就删除一个属性；字符串被截取完了就结束了
-  function parseHTML(html) {
-    // 抽象语法树
-    /*
-    {
-      tag:'div',
-      type:1,
-      children:[{tag:'span',type:1,attrs:[],parent:'div对象'}],
-      attrs:[{name:'zf',age:10}],
-      parent:null
-    }
-    */
-
-    // 用于存放元素的栈，利用栈来创建一棵树
-    var stack = [];
-    // 节点类型-标签类型
-    var ELEMENT_TYPE = 1;
-    // 节点类型-文本类型
-    var TEXT_TYPE = 3;
-    // 根节点
-    var root;
-    // 指向栈中最后一个元素
-    var currentParent;
-    function createASTElement(tagName, attrs) {
-      return {
-        tag: tagName,
-        type: ELEMENT_TYPE,
-        children: [],
-        attrs: attrs,
-        parent: null
-      };
-    }
-
-    // 开始标签 <div><span><a>text</a></span></div>
-    function start(tagName, attrs) {
-      // console.log(tagName, attrs);
-      // 创建一个ast节点
-      var element = createASTElement(tagName, attrs);
-      // 看下是否是空树
-      if (!root) {
-        // 如果为空树，当前节点是树的根节点
-        root = element;
-      }
-      // 进栈构建父子关系
-      // 放在end时候执行该逻辑也行
-      // if (currentParent) {
-      //   element.parent = currentParent;
-      //   currentParent.children.push(element);
-      // }
-      stack.push(element);
-      // currentParent为栈中的最后一个元素
-      currentParent = element;
-    }
-
-    // 结束标签
-    function end(tagName) {
-      // console.log(tagName);
-      // 当前标签结束就弹栈；弹出栈中的最后一个元素
-      var element = stack.pop();
-      // currentParent为栈中的最后一个元素
-      currentParent = stack[stack.length - 1];
-      // 出栈构建父子关系
-      // 放在start入栈的时候执行该逻辑也行
-      if (currentParent) {
-        // 当前标签结束的这个元素的parent就是栈中的最后一个元素
-        element.parent = currentParent;
-        // 栈中的最后一个元素的儿子就是当前弹栈弹出来的节点
-        currentParent.children.push(element);
-      }
-    }
-
-    // 文本；文本不需要放到栈中，文本直接放到currentParent节点的children中
-    function chars(text) {
-      // console.log(text);
-      // 去掉空，可以优化为如果空格超过2个就删除2个以上的空格
-      text = text.replace(/\s/g, "");
-      // 不是节点直接的换行等空文本
-      if (text) {
-        // 文本节点直接放到当前栈的最后一个节点的children中，作为他的儿子
-        currentParent.children.push({
-          type: TEXT_TYPE,
-          text: text,
-          parent: currentParent
-        });
-      }
-    }
-
-    // html字符串前进n个字符：例如截掉已经捕获到的开头标签名、属性名和属性值、结束标签
-    function advance(n) {
-      html = html.substring(n);
-    }
-
-    // 解析开始标签，包括解析标签名和所有属性
-    function parseStartTag() {
-      // 匹配开始标签名
-      var start = html.match(startTagOpen);
-      if (start) {
-        var match = {
-          tagName: start[1],
-          attrs: []
-        };
-
-        // html字符串截掉tagName
-        // start[0] =>
-        advance(start[0].length);
-
-        // 捕获当前标签的所有属性
-        var attr, _end;
-        // 当前捕获到了属性标签并且不是当前标签的结束
-        while (!(_end = html.match(startTagClose)) && (attr = html.match(attribute))) {
-          match.attrs.push({
-            name: attr[1],
-            value: attr[3] || attr[4] || attr[5]
-          });
-          // attr[0] => id="app"
-          advance(attr[0].length);
-        }
-
-        // html字符当前到了当前标签的结束位置 > 或者 />
-        if (_end) {
-          // 移除结束位置
-          advance(_end[0].length);
-          // 返回匹配到的当前节点
-          return match;
-        }
-      }
-    }
-
-    // html字符串肯定是以<开头
-    while (html) {
-      var textEnd = html.indexOf("<");
-      // <div>hello</div> indexOf等于0
-      // 如果textEnd为0，表明当前html字符串处于开始标签处或者结束标签处
-      // 如果textEnd大于0，表明当前html字符串处于文本节点或者空文本处，>处于文本节点的结束位置
-      if (textEnd === 0) {
-        // 如果indexOf的索引是0，则说明是一个开始标签或者结束标签
-        // 解析开始标签：<div a=b c=d>
-        var startTagMatch = parseStartTag();
-        if (startTagMatch) {
-          start(startTagMatch.tagName, startTagMatch.attrs);
-          // 继续解析当前标签下的子开头标签
-          // 例如<div a=b c=d><span>txt</span></div>中的下一个标签是<span>
-          continue;
-        }
-
-        // 解析到最深的子节点的结束标签
-        // 例如<div a=b c=d><span>txt</span></div>中的</span>
-        var endTagMatch = html.match(endTag);
-        if (endTagMatch) {
-          advance(endTagMatch[0].length);
-          end(endTagMatch[1]);
-          continue;
-        }
-        // 先让他暂停
-        // break;
-      }
-
-      // 当前html字符串处于文本标签处，因为结束标签>的index>0
-      // 标签中的空格也是文本
-      // <div a=b c=d>
-      //    <span>txt</span>
-      // </div>
-      // hello</div> indexOf大于0 说明是文本
-      var text = void 0;
-      if (textEnd > 0) {
-        text = html.substring(0, textEnd);
-      }
-      if (text) {
-        advance(text.length);
-        chars(text);
-      }
-    }
-
-    // html为空
-    // console.log("html", html);
-    // root
-    // console.log("root", root);
-
-    return root;
-  }
-
-  var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{aaaaaa}} 匹配到的时候表达式的变量
-
-  /**
-   *
-   *  <div style="color:red">hello {{name}} <span></span></div>
-   *  render(){
-   *    return _c('div',{style:{color:'red'}},_v('hello'+_s(name) + 'age' + _s(age)),_c('span',undefined,''))
-   *  }
-   */
-
-  // 如果是文本就创建文本节点；如果是标签元素就调用codegen
-  function gen(node) {
-    // 标签类型
-    if (node.type == 1) {
-      return codegen(node);
-    } else {
-      // 文本类型节点
-      var text = node.text;
-      // 纯文本类型
-      if (!defaultTagRE.test(text)) {
-        return "_v(".concat(JSON.stringify(text), ")");
-      }
-      // 包含{{}}的类型
-      // 变量name需要转成字符串_s(name) 用+拼接
-      // {{name}} hello {{name}} => _v(_s(name) + 'hello' + _s(name))
-      // console.log("文本节点：", text);
-
-      var tokens = [];
-      var match;
-      // exec方法的特殊点：
-      // 现象：当正则表达式里面有g的时候，连续执行两次结果不一样: let reg = /a/g; reg.exec('abc'); reg.exec('abc');
-      // 原因：执行完一次后 reg.lastIndex变成1了，从第一个字符再往后找就找不到了
-      // 解决方法：每次重新执行exec的时候需要把reg.lastIndex重置为0
-      defaultTagRE.lastIndex = 0;
-      // 记录上一个匹配内容后的位置，算上字符串本身的长度
-      var lastIndex = 0;
-      while (match = defaultTagRE.exec(text)) {
-        // console.log("match", match);
-        // 匹配的位置
-        var index = match.index;
-
-        // 中间有一个文本字符串
-        // {{name}} hello {{age}} age
-        // lastIndex就是{{name}}的结尾位置，index就是{{name}}的开头位置
-        if (index > lastIndex) {
-          // 把中间的hello内容放到tokens中
-          tokens.push(JSON.stringify(text.slice(lastIndex, index)));
-        }
-        tokens.push("_s(".concat(match[1].trim(), ")"));
-        lastIndex = index + match[0].length;
-      }
-
-      // 最后的文本字符串
-      // {{name}} hello {{age}} age中的age
-      // 从{{age}}的结束位置截取到最后
-      if (text.length > lastIndex) {
-        tokens.push(JSON.stringify(text.slice(lastIndex)));
-      }
-
-      // console.log(tokens);
-
-      return "_v(".concat(tokens.join("+"), ")");
-    }
-  }
-
-  // 生成儿子节点
-  function getChildren(el) {
-    var children = el.children;
-    if (children) {
-      return "".concat(children.map(function (c) {
-        return gen(c);
-      }).join(","));
-    } else {
-      return false;
-    }
-  }
-
-  // 生成属性
-  // attrs [{name: 'id', value: 'wapper'}, {name: 'style', value: 'color: red; font-size: 50px'}]
-  function genProps(attrs) {
-    var str = "";
-    var _loop = function _loop() {
-      var attr = attrs[i];
-      // 如果attr名称是style
-      // {name: 'style', value: 'color: red; font-size: 50px'}
-      // 'color: red; font-size: 50px' => {color: red, font-size: 50px}
-      if (attr.name === "style") {
-        var obj = {};
-        attr.value.split(";").forEach(function (item) {
-          var _item$split = item.split(":"),
-            _item$split2 = _slicedToArray(_item$split, 2),
-            key = _item$split2[0],
-            value = _item$split2[1];
-          obj[key] = value;
-        });
-        attr.value = obj;
-      }
-      // JSON.stringify把vue转成字符串
-      str += "".concat(attr.name, ":").concat(JSON.stringify(attr.value), ",");
+      // 'firstname' 字符串需要转换成() => vm.firstname；在什么地方转？在Watcher里面转
+      // 当firstname变化的时候，就执行cb
+      // { user: true }用户自定义的watcher
+      new Watcher(this, exprOrFn, {
+        user: true
+      }, cb);
     };
-    for (var i = 0; i < attrs.length; i++) {
-      _loop();
-    }
-    return "{".concat(str.slice(0, -1), "}");
   }
-
-  // 生成code
-  function codegen(el) {
-    // console.log("el", el);
-
-    // 生成改节点的孩子，如果有孩子就加个,没孩子就不加了
-    var children = getChildren(el);
-    var code = "_c('".concat(el.tag, "', ").concat(el.attrs.length > 0 ? genProps(el.attrs) : "undefined").concat(children ? ",".concat(children) : "", "\n  )");
-    return code;
-  }
-  function compileToFunctions(template) {
-    // console.log(template);
-
-    // 1. 将template转换成AST语法树
-    var ast = parseHTML(template);
-    // console.log(ast);
-
-    // 2. 生成render方法，render方法执行后返回的结果就是虚拟DOM
-    var code = codegen(ast);
-    // console.log("code", code);
-
-    // 模版引擎的原理： with + new Function
-    // _c('div',{style:{color:'red'}},_v('hello'+_s(name)),_c('span',undefined,''))
-    // 用with？为了取值方便；解决_c _v _s从哪儿取的问题，不用都得vm._c vm._v vm._s了
-    // 为啥是this而不是vm? render函数被谁调用就是谁； this是谁就从谁的上面取_c _v _s
-    var render = "with(this){return ".concat(code, "}");
-    var renderFn = new Function(render);
-    // 生成render函数，需要调用；分成两块：生成函数、调用函数
-    return renderFn;
-  }
-
-  // 最终的render函数
-  /*
-  function render() {
-    with (this) {
-      _c(
-        "div",
-        { style: { color: "red" } },
-        _v("hello" + _s(name)),
-        _c("span", undefined, "")
-      );
-    }
-  }
-  */
-
-  // render函数调用绑定作用域
-  // render.call(vm);
 
   // 创建元素的虚拟节点
   //  _h() _c()方法
@@ -1258,19 +1275,25 @@
   // AST是语法层面的转化，描述的是语法本身，不可以增加一些属性，原本有什么就转换什么
   // VDom是描述DOM的元素，可以增加一些自定义属性，例如事件、指令、插槽
 
+  function isSameVnode(vnode1, vnode2) {
+    return vnode1.tag === vnode2.tag && vnode1.key === vnode2.key;
+  }
+
+  // 把虚拟DOM转换成真实DOM
   function createElm(vnode) {
     var tag = vnode.tag,
       children = vnode.children;
       vnode.key;
-      vnode.data;
-      var text = vnode.text;
+      var data = vnode.data,
+      text = vnode.text;
     // 根据标签名tag来创建原生元素
     // 标签
     if (typeof tag === "string") {
       // 虚拟节点上挂真实DOM节点
       // 这里将虚拟DOM节点和真实DOM节点对应起来，后续如果修改属性了，可以找到真实DOM
       vnode.el = document.createElement(tag);
-      updateProperties(vnode);
+      // 没有老的props
+      patchProps(vnode.el, {}, data);
       // 处理儿子
       children.forEach(function (child) {
         // 儿子需要append到当前的el中
@@ -1281,22 +1304,51 @@
     }
     return vnode.el;
   }
-  function updateProperties(vnode) {
-    var newProps = vnode.data || {}; // 获取当前老节点中的属性
-    var el = vnode.el; // 当前的真实节点
-    for (var key in newProps) {
-      if (key === "style") {
+
+  // 比较props
+  // el 当前的真实节点
+  // oldProps 老的属性
+  // newProps 新的属性
+  // 1. 老的有新的没有，就需要删掉老的
+  // 2. 老的没有新的有，就需要追加
+  // 3. 老的有新的也有，就替换成新的属性值
+  function patchProps(el, oldProps) {
+    var newProps = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+    // 1. 老的有新的没有，就需要删掉老的
+    // 属性 <div a=1
+    for (var key in oldProps) {
+      if (!newProps[key]) {
+        el.removeAttribute(key);
+      }
+    }
+    // 1. 老的有新的没有，就需要删掉老的
+    // style属性 <div a=1 style="color: red;"
+    var oldStyle = oldProps.style;
+    var newStyle = newProps.style;
+    for (var _key in oldStyle) {
+      if (!newStyle[_key]) {
+        el.style[_key] = "";
+      }
+    }
+
+    // 2. 无论如何都要用新的覆盖掉老的；但是需要老的有新的没有的需要删掉，就是上面的逻辑
+    // 老的没有新的有，就需要追加
+    // 老的有新的也有，就替换成新的属性值
+    for (var _key2 in newProps) {
+      if (_key2 === "style") {
         for (var styleName in newProps.style) {
           el.style[styleName] = newProps.style[styleName];
         }
-      } else if (key === "class") {
+      } else if (_key2 === "class") {
         el.className = newProps["class"];
       } else {
         // 给这个元素添加属性 值就是对应的值
-        el.setAttribute(key, newProps[key]);
+        el.setAttribute(_key2, newProps[_key2]);
       }
     }
   }
+
+  // 首次渲染和DOM DIFF
   function patch(oldVnode, vnode) {
     // oldVnodes是el，原生DOM就是首次渲染
     var isRealElement = oldVnode.nodeType;
@@ -1313,8 +1365,71 @@
       // 再删除老节点
       parentElm.removeChild(oldVnode);
       return el;
+    } else {
+      // DOM DIFF
+      // 1. 两个节点不是同一个节点就直接删除老的换上新的(没有对比了)
+      // 2. 两个节点是同一个节点(判断节点tag和key) 比较两个节点的属性是否有差异（复用老的节点，将差异的属性更新）
+      // 3. 节点比较完毕就要比较两人的儿子
+      return patchVnode(oldVnode, vnode);
     }
   }
+  function patchVnode(oldVnode, vnode) {
+    // tag === tag && key === key
+    if (!isSameVnode(oldVnode, vnode)) {
+      var _el = createElm(vnode);
+      // 老节点的父亲替换自己的儿子为新的节点
+      oldVnode.el.parentNode.replaceChild(_el, oldVnode.el);
+      return _el;
+    }
+
+    // 文本节点的tag和key都是undefined；undefined === undefined
+    // 文本节点：需要比较下文本的内容
+    // 复用老的文本节点的元素
+    var el = vnode.el = oldVnode.el;
+    if (!oldVnode.tag) {
+      if (oldVnode.text !== vnode.text) {
+        // 用新的文本替换掉老的文本
+        oldVnode.el.textContent = vnode.text;
+      }
+    }
+
+    // 是标签 同一个标签需要比对标签的属性
+    patchProps(el, oldVnode.data, vnode.data);
+
+    // 比较儿子节点 比较的时候
+    // 1. 一方有儿子一方没有儿子 老的有新的没有就把老的儿子节点全都删掉；老的没有新的有就需要把新的儿子都追加到老的里面
+    // 2. 两方都有儿子
+
+    var oldChildren = oldVnode.children || [];
+    var newChildren = vnode.children || [];
+    if (oldChildren.length > 0 && newChildren.length > 0) {
+      // 完整的diff算法，需要比较两人的儿子
+      updateChildren(el, oldChildren, newChildren);
+    } else if (oldChildren.length === 0 && newChildren.length > 0) {
+      // 没有老的，有新的的；用新的append到el里面
+      mountChildren(el, newChildren);
+    } else if (oldChildren.length > 0 && newChildren.length === 0) {
+      // 老的有，新的没有；就删掉老的
+      // innerHTML清空孩子，也可以循环删除
+      // 源码中还需要考虑组件的情况，需要销毁组件
+      el.innerHTML = "";
+    }
+    return el;
+  }
+  function mountChildren(el, newChildren) {
+    for (var i = 0; i < newChildren.length; i++) {
+      el.appendChild(createElm(newChildren[i]));
+    }
+  }
+  function updateChildren(el, oldChildren, newChildren) {
+    var oldEndIndex = oldChildren.length - 1;
+    var newEndIndex = newChildren.length - 1;
+    oldChildren[0];
+    newChildren[0];
+    oldChildren[oldEndIndex];
+    newChildren[newEndIndex];
+  }
+
   function initLifeCycle(Vue) {
     // 把_render函数生成的虚拟DOM，生成真实DOM
     Vue.prototype._update = function (vnode) {
@@ -1359,6 +1474,7 @@
     };
   }
   function mountComponent(vm, el) {
+    // 这里的el是通过querySelector处理过的
     vm.$el = el;
     // 1. 调用render方法，生成虚拟DOM
     // 2. 根据虚拟DOM，生成真实DOM
@@ -1467,28 +1583,47 @@
     // options就是用户的选项
     this._init(options);
   }
-
-  // 暂时先这么写，扩展$nextTick方法
-  Vue.prototype.$nextTick = nextTick;
   initMixin(Vue); // 扩展了_init方法
-  initLifeCycle(Vue); // 扩展了生命周期方法
+  initLifeCycle(Vue); // 扩展了生命周期方法 vm._update vm._render方法
+  initGlobalAPI(Vue); // 全局api的实现
+  initSateMixin(Vue); // 实现了$nextTick和$watch方法
 
-  // 前面都是扩展实例方法
-  // 底下是扩展静态方法，等会抽取出去单独文件
-  initGlobalAPI(Vue);
+  // ------------为了方便观察前后的虚拟节点--测试的
 
-  // watch最终调用的$watch方法
-  // options参数可以是 dep: true深度监听;immediate立即执行
-  Vue.prototype.$watch = function (exprOrFn, cb) {
-    // console.log("$watch", exprOrFn, cb);
+  var render1 = compileToFunctions("<ul a=\"1\" style=\"color: red;\">\n    <li key=\"A\">A</li>\n    <li key=\"B\">B</li>\n    <li key=\"C\">C</li>\n  </ul>");
+  var vm1 = new Vue({
+    data: {
+      name: "zuopf1"
+    }
+  });
+  var preVnode = render1.call(vm1);
+  var el = createElm(preVnode);
+  document.body.appendChild(el);
 
-    // 'firstname' 字符串需要转换成() => vm.firstname；在什么地方转？在Watcher里面转
-    // 当firstname变化的时候，就执行cb
-    // { user: true }用户自定义的watcher
-    new Watcher(this, exprOrFn, {
-      user: true
-    }, cb);
-  };
+  // console.log("preVnode", preVnode);
+
+  var render2 = compileToFunctions("<ul style=\"color: yellow;background:blue\">\n    <li key=\"A\">A</li>\n    <li key=\"B\">B</li>\n    <li key=\"C\">C</li>\n    <li key=\"D\">D</li>\n  </ul>");
+  var vm2 = new Vue({
+    data: {
+      name: "zuopf2"
+    }
+  });
+  var nextVnode = render2.call(vm2);
+  // console.log("nextVnode", nextVnode);
+
+  // let newEl = createElm(nextVnode);
+  // el.parentNode.replaceChild(newEl.el);
+
+  // 直接更新: 直接用新的节点替换了老的节点
+  // 直接替换的性能问题: console.log(dir(dom)) dom节点上有很多属性；获取dom并不消耗性能，重要的是
+  // DOM Diff: 不是直接替换，而是比较两个人的区别之后再替换
+  // Diff算法的思想：diff算法是一个平级比较的过程，父亲和父亲比，儿子和儿子比对
+  setTimeout(function () {
+    // let newel = createElm(nextVnode);
+    // el.parentNode.replaceChild(newel, el);
+    // DOM Diff
+    patch(preVnode, nextVnode);
+  }, 1000);
 
   return Vue;
 

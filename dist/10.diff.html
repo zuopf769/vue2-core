@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="wapper">firstname: {{firstname}}</div>
+    </div>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.9/vue.js"></script> -->
+    <script src="./vue.js"></script>
+    <script>
+      // 1. 实现diff算法
+      //    在之前的更新中每次更新，都会产生新的虚拟节点，通过新的虚拟节点生成真实节点，生成后替换掉老的节点
+      //    第一次渲染的时候我们会生成虚拟节点，第二次更新的时候也会调用render方法产生新的虚拟节点；比要对出需要更新的内容更新部分内容
+      let vm = new Vue({
+        el: "#app",
+        data() {
+          return {
+            firstname: "pengfei",
+            lastname: "zuo",
+            age: 30,
+          };
+        },
+      });
+    </script>
+  </body>
+</html>

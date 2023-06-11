@@ -40,3 +40,7 @@ function vnode(vm, tag, data, key, children, text) {
 // 区别二：是否可以增加一些属性
 // AST是语法层面的转化，描述的是语法本身，不可以增加一些属性，原本有什么就转换什么
 // VDom是描述DOM的元素，可以增加一些自定义属性，例如事件、指令、插槽
+
+export function isSameVnode(vnode1, vnode2) {
+  return vnode1.tag === vnode2.tag && vnode1.key === vnode2.key;
+}

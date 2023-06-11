@@ -1,65 +1,6 @@
 import Watcher from "./observe/watcher";
 import { createElementVNode, createTextVNode } from "./vdom";
-
-function createElm(vnode) {
-  let { tag, children, key, data, text } = vnode;
-  // 根据标签名tag来创建原生元素
-  // 标签
-  if (typeof tag === "string") {
-    // 虚拟节点上挂真实DOM节点
-    // 这里将虚拟DOM节点和真实DOM节点对应起来，后续如果修改属性了，可以找到真实DOM
-    vnode.el = document.createElement(tag);
-    updateProperties(vnode);
-    // 处理儿子
-    children.forEach((child) => {
-      // 儿子需要append到当前的el中
-      return vnode.el.appendChild(createElm(child));
-    });
-  } else {
-    vnode.el = document.createTextNode(text);
-  }
-  return vnode.el;
-}
-
-function updateProperties(vnode) {
-  let newProps = vnode.data || {}; // 获取当前老节点中的属性
-  let el = vnode.el; // 当前的真实节点
-  for (let key in newProps) {
-    if (key === "style") {
-      for (let styleName in newProps.style) {
-        el.style[styleName] = newProps.style[styleName];
-      }
-    } else if (key === "class") {
-      el.className = newProps.class;
-    } else {
-      // 给这个元素添加属性 值就是对应的值
-      el.setAttribute(key, newProps[key]);
-    }
-  }
-}
-
-function patch(oldVnode, vnode) {
-  // oldVnodes是el，原生DOM就是首次渲染
-  const isRealElement = oldVnode.nodeType;
-  if (isRealElement) {
-    // 首次渲染
-    // 获取真实DOM
-    const oldElm = oldVnode;
-    // 获取真实DOM的父容器
-    const parentElm = oldElm.parentNode;
-
-    let el = createElm(vnode);
-
-    // 先把新的节点插入到老节点的下面
-    parentElm.insertBefore(el, oldElm.nextSibling);
-    // 再删除老节点
-    parentElm.removeChild(oldVnode);
-
-    return el;
-  } else {
-    // DOM DIFF
-  }
-}
+import { patch } from "./vdom/patch";
 
 export function initLifeCycle(Vue) {
   // 把_render函数生成的虚拟DOM，生成真实DOM
@@ -110,6 +51,7 @@ export function initLifeCycle(Vue) {
 }
 
 export function mountComponent(vm, el) {
+  // 这里的el是通过querySelector处理过的
   vm.$el = el;
   // 1. 调用render方法，生成虚拟DOM
   // 2. 根据虚拟DOM，生成真实DOM
