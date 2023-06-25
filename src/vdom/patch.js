@@ -161,33 +161,120 @@ function updateChildren(el, oldChildren, newChildren) {
   let newEndVnode = newChildren[newEndIndex];
   // console.log(oldStartVnode, oldEndVnode);
 
+  function makeIndexByKey(children) {
+    // 键值为key，值为索引
+    let map = {};
+    children.forEach((item, index) => {
+      map[item.key] = index;
+    });
+    return map;
+  }
+  // 将oldChildren转换成map映射表
+  // 对所有的孩子元素进行编号
+  let map = makeIndexByKey(oldChildren);
+
+  // 面试题：循环的时候为什么加key? 给动态列表添加key的时候劲量不要写index,因为索引前后都是以0开始，可能会发生错误复用
+  // &&有任何一个不满足则停止 ||有一个尾true就继续
   while (oldStartIndex <= oldEndIndex && newStartIndex <= newEndIndex) {
     // 只要双方有一方头指针大于尾部指针则退出循环
     // 只要有一方不满足条件就退出
 
+    // 在乱序比对中如果老的某个节点被标识为了undefined，则老的开始和结束节点在往后往前移动的过程中需要跳过
+    // 遇到undefined就跳过，最后会删除
+    if (!oldStartVnode) {
+      oldStartVnode = oldChildren[++oldStartIndex];
+    } else if (!oldEndVnode) {
+      oldEndVnode = oldChildren[--oldEndIndex];
+    }
+
     // 比较开头节点 头头比对
     if (isSameVnode(oldStartVnode, newStartVnode)) {
       // 如果是相同节点，则递归比较子节点
+      // 递归比较子节点
       patchVnode(oldStartVnode, newStartVnode);
+      // 然后新旧头部指针后移一位
       oldStartVnode = oldChildren[++oldStartIndex];
       newStartVnode = newChildren[++newStartIndex];
-    }
-
-    // 比较结尾节点 尾尾比对
-    if (isSameVnode(oldEndVnode, newEndVnode)) {
+    } else if (isSameVnode(oldEndVnode, newEndVnode)) {
+      // 开头节点不相等就比较结尾节点 尾尾比较
+      // 比较结尾节点 尾尾比对
       // 如果是相同节点，则递归比较子节点
       patchVnode(oldEndVnode, newEndVnode);
+      // 然后新旧尾部指针前移一位
       oldEndVnode = oldChildren[--oldEndIndex];
       newEndVnode = newChildren[--newEndIndex];
-    }
+    } else if (isSameVnode(oldEndVnode, newStartVnode)) {
+      // 交叉比对： 头头不一样，尾尾不一样，就老头和新尾比，老尾和新头
 
-    // 交叉比对： 头头不一样，尾尾不一样，就老头和新尾比，老尾和新头
+      // 尾移头
+
+      // abcd => dabc 尾部要移动到头部
+      // diff-7.jpeg
+
+      // 如果是相同节点，则递归比较子节点
+      patchVnode(oldEndVnode, newStartVnode);
+      // 复用老的节点： 把老的最后一个节点移动到老的开始节点的前面；把尾移动到了头部
+      // insertBefore具有移动性，会将原来的元素移动走
+      // 先移动元素在移动指针
+      el.insertBefore(oldEndVnode.el, oldStartVnode.el);
+      // 然后旧的尾部指针前移
+      oldEndVnode = oldChildren[--oldEndIndex];
+      // 然后新的头部指针后移
+      newStartVnode = newChildren[++newStartIndex];
+    } else if (isSameVnode(oldStartVnode, newEndVnode)) {
+      // 交叉比对： 头头不一样，尾尾不一样，就老头和新尾比，老尾和新头
+
+      // 头移尾
+
+      // abcd => bcda  头部移动到头尾部
+      // diff-8.jpeg
+
+      // 如果是相同节点，则递归比较子节点
+      patchVnode(oldStartVnode, newEndVnode);
+      // 复用老的节点： 把老的第一个节点移动到老的结束节点的下一个节点（null）后面；把头移动到了尾部
+      // oldEndVnode.el.nextSibling是null
+      // insertBefore具有移动性，会将原来的元素移动走
+      // insertBefore当第二个参数是null的时候相当于appendChild
+      el.insertBefore(oldStartVnode.el, oldEndVnode.el.nextSibling);
+      oldStartVnode = oldChildren[++oldStartIndex];
+      newEndVnode = newChildren[--newEndIndex];
+    } else {
+      // 乱序比对（头头、尾尾、头尾、尾头都比对不上）：这就优化不了了，肯定需要映射
+      // diff-11.jpeg
+      // 算法思路：
+      // 根据老的children做一个映射表；
+      // 用新的去找，找到则移动，并打个标识标识要删除（undefined）（不能删除，否则会导致数组塌陷）
+      // 找不到则创建新的添加并插入到头指针的前面（一直都是插入到头指针的前面）；
+      // 最后多余的就删除
+
+      // 用新的元素去老的中进行查找，如果找到则移动，找不到则直接插入
+      // 老的映射里面有我要移动的索引
+      let moveIndex = map[newStartVnode.key];
+      // 有的话做移动操作
+      if (moveIndex !== undefined) {
+        // 找到对应的虚拟节点复用
+        let moveVnode = oldChildren[moveIndex];
+        // 移动都是移动到老节点的开始节点的前面
+        el.insertBefore(moveVnode.el, oldStartVnode.el);
+        // 标识为undefined，表示这个节点已经移动走了，不能删除，否则会导致数组塌陷，因为循环的过程中删除会影响原本的数组长度
+        oldChildren[moveIndex] = undefined;
+        // 比较属性和递归比较子节点
+        patchVnode(moveVnode, newStartVnode);
+      } else {
+        // 老的中没有则创建一个新元素并插入到老节点的前面
+        el.insertBefore(createElm(newStartVnode), oldStartVnode.el);
+      }
+      // 新节点的开始节点向后移动
+      newStartVnode = newChildren[++newStartIndex];
+    }
   }
 
-  // 退出上面循环： 有一方已经比较完毕
-  // diff-2.jpeg 如果老的节点oldStartIndex已经越界了，新的后面还有几个节点就插进去
+  // 退出上面循环： 有一方已经越界，有一方已经比较完毕
+  // diff-2.jpeg（新的后面多几个节点）和diff-4.jpeg（新的前面多几个节点） 都会走到这里
+  // diff-2.jpeg 如果老的节点oldStartIndex已经越界了，新的后面还有几个节点就插进去后面；比完后新的后面有多余的就插入到后面
+  // diff-4.jpeg 如果老的节点的oldEndIndex已经越界了，新的前面还有几个节点就插入到前面；比完后新的前面有多余的就插入到前面
   if (newStartIndex <= newEndIndex) {
-    // 后面可能有一个节点，也可能多个节点
+    // newStartIndex和newEndIndex之间可能有一个节点，也可能多个节点
     for (let i = newStartIndex; i <= newEndIndex; i++) {
       // 这里可能是向后追加也可能是向前追加
 
@@ -195,9 +282,11 @@ function updateChildren(el, oldChildren, newChildren) {
 
       /*
       if (newChildren[++newEndIndex]) {
+        // diff-4.jpeg
         // 头部插入，尾指针挪到了前面
         el.insertBefore(childEl, newChildren[++newEndIndex].el);
       } else {
+        // diff-2.jpeg
         // 尾部插入，因为尾指针后面已经没有元素了
         el.appendChild(createElm(newChildren[i]));
       }
@@ -213,10 +302,20 @@ function updateChildren(el, oldChildren, newChildren) {
     }
   }
 
-  // diff-3.jpeg 如果新的已经越界，老的后面还剩几个就删除
+  // diff-3.jpeg 如果新的已经越界，老的后面还剩几个就都删除
+  // 老的多了，老的有剩余
+  // 退出上面循环： 有一方已经比较完毕-新的比较完毕，老的有剩余
+  // 乱序比对的删除也会走到这里
+  // 如果有剩余则直接删除
   if (oldStartIndex <= oldEndIndex) {
     for (let i = oldStartIndex; i <= oldEndIndex; i++) {
-      el.removeChild(oldChildren[i].el);
+      // 虚拟节点上维护着el
+      let child = oldChildren[i];
+      // 因为可能在乱序比对的过程中标识成了undefined
+      if (child != undefined) {
+        // 虚拟节点上维护着el
+        parent.removeChild(child.el);
+      }
     }
   }
 }

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <div id="app">
+      <ul>
+        <!--不加key-->
+        <li v-for="item in arr">
+          {{item}}
+          <input type="checkbox" />
+        </li>
+      </ul>
+      <button @click="append">追加</button>
+    </div>
+    <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.9/vue.js"></script>
+    <script>
+      // diff-9.jepg
+      let vm = new Vue({
+        el: "#app",
+        data() {
+          return {
+            arr: ["桃子", "香蕉", "橘子"],
+          };
+        },
+        methods: {
+          append() {
+            // 添加新item后，没问题，勾选后在添加，新加的草莓会被勾选住
+            this.arr.unshift("草莓");
+          },
+        },
+      });
+    </script>
+  </body>
+</html>
