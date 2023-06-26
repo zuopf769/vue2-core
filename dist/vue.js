@@ -504,6 +504,21 @@
   // 计算属性的props merge策略
   // strats.computed = function (p, c) {};
 
+  // 自身组件components和全局组件Vue.options.components的merge策略：优先找自己的，自己没有再找父亲身上的
+  strats.components = function (p, c) {
+    // 以父亲p为原型创建一个对象res.__proto = {xxx: {}}
+    // 父亲p的原型上维护着某个ID对应的全局组件
+    var res = Object.create(p);
+    // 如果子存在
+    if (c) {
+      // 把儿子的key添加到新创建出来的对象res上，达到儿子上有就先用儿子上的key，没有就从父亲的原型上取
+      for (var key in c) {
+        res[key] = c[key];
+      }
+    }
+    return res;
+  };
+
   // ...剩下的策略
 
   function mergeOptions(parent, child) {
@@ -541,7 +556,9 @@
 
   function initGlobalAPI(Vue) {
     // Vue的静态属性
-    Vue.options = {};
+    Vue.options = {
+      _base: Vue // 存储Vue构造函数，方便在其他地方去
+    };
 
     // Vue的静态方法，把选项合并到了Vue.options上
     Vue.mixin = function (mixin) {
@@ -552,6 +569,38 @@
       this.options = mergeOptions(this.options, mixin);
       // 为了链式调用
       return this;
+    };
+
+    // Vue的静态方法，生成一个组件并且对组件进行初始化
+    // 可以手动创建组件并挂载
+    Vue.extend = function (options) {
+      // 根据用户的参数最终返回一个构造函数，当做一个组件来使用，可以new一个实例
+      function Sub() {
+        var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+        // this是Sub的实例，Sub的实例上没有_init方法，但是沿着原型链找能找到
+        // 调用Vue上的初始化方法，默认对子类进行初始化操作
+        this._init(options);
+      }
+
+      // 通过Sub的prototype能找到Vue的prototype
+      // Sub.prototype.__proto__ == Vue.prototype；但是需要注意下面的constructor的指向问题
+      Sub.prototype = Object.create(Vue.prototype);
+      // 把 Sub.prototype.constructor从Vue指回到Sub
+      Sub.prototype.constructor = Sub;
+      // 保存用户传递的options
+      // 希望将用户传递的参数和全局的Vue.options合并
+      Sub.options = mergeOptions(Vue.options, options);
+      return Sub;
+    };
+
+    // 全局组件；类比全局指令Vue.options.directives = {};
+    Vue.options.components = {};
+    Vue.component = function (id, definition) {
+      // 如果definition是函数，说明已经用Vue.extend包装过了，某则需要包装下
+      definition = typeof definition === "function" ? definition : Vue.extend(definition);
+      // 在全局上标识组件
+      Vue.options.components[id] = definition;
+      console.log(Vue.options.components);
     };
   }
 
@@ -1231,6 +1280,12 @@
 
   // 创建元素的虚拟节点
   //  _h() _c()方法
+
+  // 判断是否是原生的html 元素标签
+  // 模板编译过程中都是标签，my-button也是一个字符串，如何才能区分是h5内置的标签还是用户自定义组件标签名？
+  var isReservedTag = function isReservedTag(tag) {
+    return ["a", "div", "p", "button", "ul", "li", "span"].includes(tag);
+  };
   function createElementVNode(vm, tag, data) {
     if (data == null) {
       data = {};
@@ -1243,7 +1298,35 @@
     for (var _len = arguments.length, children = new Array(_len > 3 ? _len - 3 : 0), _key = 3; _key < _len; _key++) {
       children[_key - 3] = arguments[_key];
     }
-    return vnode(vm, tag, data, key, children);
+    if (isReservedTag(tag)) {
+      // 创建一个原生的H5标签的虚拟DOM
+      return vnode(vm, tag, data, key, children);
+    } else {
+      // 创建一个自定义组件的虚拟DOM
+
+      // Ctor就是组件的定义：可能是一个Sub类，还有可能是组件的obj类型{template: '<div>xxxx</div>'}
+      var Ctor = vm.$options.components[tag];
+      return createComponentVNode(vm, tag, data, key, children, Ctor);
+    }
+  }
+
+  // 创建组件的虚拟节点
+  function createComponentVNode(vm, tag, data, key, children, Ctor) {
+    // 对象类型{template: '<div>xxxx</div>'需要调用Vue.extend()方法
+    // 那么问题来了？咋么样才能拿到Vue呢？
+    if (_typeof(Ctor) === "object") {
+      // console.log(vm.$options._base);
+      // vm.$options._base上维护着Vue
+      Ctor = vm.$options._base.extend(Ctor);
+    }
+    data.hook = {
+      init: function init() {
+        // 稍后创建真实节点的时候，如果是组件则调用此init方法
+      }
+    };
+    return vnode(vm, tag, data, key, children, null, {
+      Ctor: Ctor
+    });
   }
 
   // 创建文本的虚拟节点
@@ -1254,7 +1337,7 @@
 
   // 虚拟节点vnode
   // key很重要dom diff
-  function vnode(vm, tag, data, key, children, text) {
+  function vnode(vm, tag, data, key, children, text, componentOptions) {
     // vnode上维护了vm属性
     return {
       vm: vm,
@@ -1262,7 +1345,8 @@
       data: data,
       key: key,
       children: children,
-      text: text
+      text: text,
+      componentOptions: componentOptions // 组件的构造函数
     };
   }
 
@@ -1703,8 +1787,7 @@
 
       // 我们使用vue的时候，$nextTick, $data, $attr...以$开头的都表示Vue的内置属性
       var vm = this;
-
-      // 用全局options(Vue.options)和用户的options来合并merge
+      // 用全局options(Vue.options)和用户的options来合并merge；不用Vue.options是因为可能是子类的Options例如Sub.options
       // 我们定义的全局指令和过滤器等等都会挂载到实例上
       vm.$options = mergeOptions(this.constructor.options, options); // 将用户的选项挂载到实例上
 

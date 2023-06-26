@@ -11,8 +11,7 @@ export function initMixin(Vue) {
 
     // 我们使用vue的时候，$nextTick, $data, $attr...以$开头的都表示Vue的内置属性
     const vm = this;
-
-    // 用全局options(Vue.options)和用户的options来合并merge
+    // 用全局options(Vue.options)和用户的options来合并merge；不用Vue.options是因为可能是子类的Options例如Sub.options
     // 我们定义的全局指令和过滤器等等都会挂载到实例上
     vm.$options = mergeOptions(this.constructor.options, options); // 将用户的选项挂载到实例上
 

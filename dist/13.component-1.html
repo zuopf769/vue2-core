@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <div id="app">
+      <my-button></my-button>
+      <my-button></my-button>
+      <div id="wapper">firstname: {{firstname}}</div>
+    </div>
+    <div id="mount-point"></div>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.9/vue.js"></script>
+    <!-- <script src="./vue.js"></script> -->
+    <script>
+      // new Vue产生的是根实例组件
+      // 组件的三大特性：自定义标签；组件里面有自己的属性和事件、可以接收属性和派发自定义事件；组件的插槽
+      // webcomponent，vue实现了自己的一套webcomponent
+
+      // 声明组件-全局组件
+      // Vue.extend()方法写不写效果都一样，其实vue内部调用了Vue.extend把对象包裹了
+      // https://v2.cn.vuejs.org/v2/api/#Vue-extend
+
+      // Vue.extend返回的是Vue的子类
+      // 创建构造器
+
+      var Profile = Vue.extend({
+        template: "<p>{{firstName}} {{lastName}} aka {{alias}}</p>",
+        data: function () {
+          return {
+            firstName: "Walter",
+            lastName: "White",
+            alias: "Heisenberg",
+          };
+        },
+      });
+      // 创建 Profile 实例，并挂载到一个元素上。
+      new Profile().$mount("#mount-point");
+
+      Vue.component(
+        "my-button",
+        Vue.extend({
+          template: "<button>点我</button>",
+        })
+      );
+      let vm = new Vue({
+        el: "#app",
+        data() {
+          return {
+            firstname: "pengfei",
+            lastname: "zuo",
+            age: 30,
+          };
+        },
+        components: {
+          "my-button": Vue.extend({
+            //局部组件-优先级比全局组件高：原理类似js的原型链，自己身上找不到，就去链上找
+            template: "<button>点我-local</button>",
+          }),
+        },
+      });
+    </script>
+  </body>
+</html>

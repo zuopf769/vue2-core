@@ -25,6 +25,22 @@ LIFECYCLES.forEach((hook) => {
 // 计算属性的props merge策略
 // strats.computed = function (p, c) {};
 
+// 自身组件components和全局组件Vue.options.components的merge策略：优先找自己的，自己没有再找父亲身上的
+strats.components = function (p, c) {
+  // 以父亲p为原型创建一个对象res.__proto = {xxx: {}}
+  // 父亲p的原型上维护着某个ID对应的全局组件
+  let res = Object.create(p);
+  // 如果子存在
+  if (c) {
+    // 把儿子的key添加到新创建出来的对象res上，达到儿子上有就先用儿子上的key，没有就从父亲的原型上取
+    for (let key in c) {
+      res[key] = c[key];
+    }
+  }
+
+  return res;
+};
+
 // ...剩下的策略
 
 export function mergeOptions(parent, child) {
