@@ -40,8 +40,14 @@ export function createComponentVNode(vm, tag, data, key, children, Ctor) {
   }
 
   data.hook = {
-    init() {
+    init(vnode) {
       // 稍后创建真实节点的时候，如果是组件则调用此init方法
+      // 为什么不直接去上面参数中的Ctor？其实在VUE真实源码中为了解耦把init方法抽到了外面，这样不用传来传去
+      // 保存组件的实例到虚拟节点上
+      let instance = (vnode.componentInstance =
+        new vnode.componentOptions.Ctor());
+      //
+      instance.$mount();
     },
   };
 
@@ -65,7 +71,7 @@ function vnode(vm, tag, data, key, children, text, componentOptions) {
     key,
     children,
     text,
-    componentOptions, // 组件的构造函数
+    componentOptions, // 组件的构造函数 为毛要把构造函数放到这里啊，为了解耦，方便在
   };
 }
 

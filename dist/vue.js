@@ -1320,8 +1320,13 @@
       Ctor = vm.$options._base.extend(Ctor);
     }
     data.hook = {
-      init: function init() {
+      init: function init(vnode) {
         // 稍后创建真实节点的时候，如果是组件则调用此init方法
+        // 为什么不直接去上面参数中的Ctor？其实在VUE真实源码中为了解耦把init方法抽到了外面，这样不用传来传去
+        // 保存组件的实例到虚拟节点上
+        var instance = vnode.componentInstance = new vnode.componentOptions.Ctor();
+        //
+        instance.$mount();
       }
     };
     return vnode(vm, tag, data, key, children, null, {
@@ -1346,7 +1351,7 @@
       key: key,
       children: children,
       text: text,
-      componentOptions: componentOptions // 组件的构造函数
+      componentOptions: componentOptions // 组件的构造函数 为毛要把构造函数放到这里啊，为了解耦，方便在
     };
   }
 
@@ -1363,6 +1368,19 @@
     return vnode1.tag === vnode2.tag && vnode1.key === vnode2.key;
   }
 
+  // 创建组件类型的实例
+  function createComponent(vnode) {
+    var i = vnode.data;
+    if ((i = i.hook) && (i = i.init)) {
+      // 如果经过两次取值；i还存在，就初始化组件
+      i(vnode);
+    }
+    if (vnode.componentInstance) {
+      // 说明是组件
+      return true;
+    }
+  }
+
   // 把虚拟DOM转换成真实DOM
   function createElm(vnode) {
     var tag = vnode.tag,
@@ -1373,6 +1391,14 @@
     // 根据标签名tag来创建原生元素
     // 标签
     if (typeof tag === "string") {
+      // 创建真实元素，需要区分是组件还是元素
+
+      // 是组件类型
+      if (createComponent(vnode)) {
+        // 返回组件创建真实元素；在下面的递归的地方会插入到父元素中
+        return vnode.componentInstance.$el;
+      }
+
       // 虚拟节点上挂真实DOM节点
       // 这里将虚拟DOM节点和真实DOM节点对应起来，后续如果修改属性了，可以找到真实DOM
       vnode.el = document.createElement(tag);
@@ -1380,7 +1406,7 @@
       patchProps(vnode.el, {}, data);
       // 处理儿子
       children.forEach(function (child) {
-        // 儿子需要append到当前的el中
+        // 儿子需要append到当前的el中；如果儿子是组件，组件创建的元素也会插入到父元素中
         return vnode.el.appendChild(createElm(child));
       });
     } else {
@@ -1435,6 +1461,11 @@
 
   // 首次渲染和DOM DIFF
   function patch(oldVnode, vnode) {
+    // 这就是组件的首次挂载
+    if (!oldVnode) {
+      return createElm(vnode);
+    }
+
     // oldVnodes是el，原生DOM就是首次渲染
     var isRealElement = oldVnode.nodeType;
     if (isRealElement) {

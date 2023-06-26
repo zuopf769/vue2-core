@@ -1,11 +1,32 @@
 import { isSameVnode } from "./index";
 
+// 创建组件类型的实例
+function createComponent(vnode) {
+  let i = vnode.data;
+  if ((i = i.hook) && (i = i.init)) {
+    // 如果经过两次取值；i还存在，就初始化组件
+    i(vnode);
+  }
+  if (vnode.componentInstance) {
+    // 说明是组件
+    return true;
+  }
+}
+
 // 把虚拟DOM转换成真实DOM
 export function createElm(vnode) {
   let { tag, children, key, data, text } = vnode;
   // 根据标签名tag来创建原生元素
   // 标签
   if (typeof tag === "string") {
+    // 创建真实元素，需要区分是组件还是元素
+
+    // 是组件类型
+    if (createComponent(vnode)) {
+      // 返回组件创建真实元素；在下面的递归的地方会插入到父元素中
+      return vnode.componentInstance.$el;
+    }
+
     // 虚拟节点上挂真实DOM节点
     // 这里将虚拟DOM节点和真实DOM节点对应起来，后续如果修改属性了，可以找到真实DOM
     vnode.el = document.createElement(tag);
@@ -13,7 +34,7 @@ export function createElm(vnode) {
     patchProps(vnode.el, {}, data);
     // 处理儿子
     children.forEach((child) => {
-      // 儿子需要append到当前的el中
+      // 儿子需要append到当前的el中；如果儿子是组件，组件创建的元素也会插入到父元素中
       return vnode.el.appendChild(createElm(child));
     });
   } else {
@@ -66,6 +87,11 @@ export function patchProps(el, oldProps = {}, newProps = {}) {
 
 // 首次渲染和DOM DIFF
 export function patch(oldVnode, vnode) {
+  // 这就是组件的首次挂载
+  if (!oldVnode) {
+    return createElm(vnode);
+  }
+
   // oldVnodes是el，原生DOM就是首次渲染
   const isRealElement = oldVnode.nodeType;
   if (isRealElement) {
