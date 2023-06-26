@@ -9,10 +9,24 @@ export function initLifeCycle(Vue) {
     const vm = this;
     const el = vm.$el;
 
+    // 先取再赋值
+    // 是否存在_vnode
+    const preVnode = vm._vnode;
+    // 把组件第一次产生的虚拟节点保存到_vnode变量上
+    vm._vnode = vnode;
+    if (preVnode) {
+      // preVnode有值表示第二次渲染
+      vm.$el = patch(preVnode, vnode);
+    } else {
+      // preVnode没有值表示第一次渲染
+      // patch既有初始化的功能，又有更新的功能
+      vm.$el = patch(el, vnode);
+    }
+
     // console.log("el", el);
 
-    // patch既有初始化的功能，又有更新的功能
-    vm.$el = patch(el, vnode);
+    // // patch既有初始化的功能，又有更新的功能
+    // vm.$el = patch(el, vnode);
   };
 
   // 生成虚拟DOM

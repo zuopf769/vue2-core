@@ -18,6 +18,8 @@ initSateMixin(Vue); // 实现了$nextTick和$watch方法
 
 // ------------为了方便观察前后的虚拟节点--测试的
 
+/*
+
 // 1 新后面追加
 // let render1 = compileToFunctions(
 //   `<ul a="1" style="color: red;">
@@ -202,5 +204,7 @@ setTimeout(() => {
   // DOM Diff
   patch(preVnode, nextVnode);
 }, 1000);
+
+*/
 
 export default Vue;
